@@ -33,6 +33,7 @@ from exotel_client import make_outbound_call
 from scraper import parse_offer_file, scrape_hero_website
 from scheduler import start_scheduler, stop_scheduler
 from voice import synthesize_speech, transcribe_audio
+from keep_alive import keep_alive
 
 # ── App setup ──────────────────────────────────────────────────────────────────
 app = FastAPI(title="Shubham Motors AI Agent", version="2.1.0")
@@ -48,6 +49,7 @@ _executor = ThreadPoolExecutor(max_workers=12)
 
 @app.on_event("startup")
 async def startup():
+    keep_alive()
     print(f"\n{'='*60}")
     print(f"  SHUBHAM MOTORS AI AGENT — STARTING UP")
     print(f"  {config.BUSINESS_NAME}, {config.BUSINESS_CITY}")
