@@ -198,14 +198,13 @@ async def _run(fn, *args, timeout: float = 12.0):
 # ── EXOTEL WEBHOOKS ────────────────────────────────────────────────────────────
 @app.api_route("/call/incoming", methods=["GET", "POST"])
 async def incoming_call(request: Request, background_tasks: BackgroundTasks):
-
     if request.method == "GET":
         data = request.query_params
     else:
         data = await request.form()
 
     call_sid = data.get("CallSid", "").strip()
-    caller = data.get("From", "").strip()
+    caller   = data.get("From", "").strip()
 
     print(f"\n[Incoming] Call from {caller} | SID: {call_sid}")
 
@@ -215,29 +214,48 @@ async def incoming_call(request: Request, background_tasks: BackgroundTasks):
             media_type="application/xml"
         )
 
-    # start call session
     start_call_session(call_sid, caller)
 
-    async def _pregen_audio():
-        audio = await _run(get_opening_audio, call_sid, timeout=8.0)
-        if audio:
-            (UPLOAD_DIR / f"opening_{call_sid}.mp3").write_bytes(audio)
-            print(f"[Incoming] ✅ Audio ready: {len(audio)} bytes")
-    background_tasks.add_task(_pregen_audio)
+    # Copy warmup file for this call if available
+    warmup = UPLOAD_DIR / "opening_warmup.mp3"
+    call_audio = UPLOAD_DIR / f"opening_{call_sid}.mp3"
 
-    # return XML immediately
-    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+    if warmup.exists():
+        import shutil
+        shutil.copy(warmup, call_audio)
+        print(f"[Incoming] ✅ Using warmup file")
+        xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Play>{config.PUBLIC_URL}/call/audio/opening/{call_sid}</Play>
-
   <Record action="{config.PUBLIC_URL}/call/gather/{call_sid}"
           method="POST"
           maxLength="60"
           timeout="10"
           playBeep="false"
           finishOnKey="#" />
-</Response>
-"""
+</Response>"""
+    else:
+        # No warmup file — use <Say> immediately, generate warmup in background
+        print(f"[Incoming] ⚠️ No warmup file — using Say fallback")
+        greeting = "Namaste! Main Priya bol rahi hoon, Shubham Motors Hero MotoCorp se, Jaipur. Aap ka call receive karke bahut khushi hui! Kaise madad kar sakti hoon aapki?"
+        xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say language="hi-IN" voice="woman">{_xml_safe(greeting)}</Say>
+  <Record action="{config.PUBLIC_URL}/call/gather/{call_sid}"
+          method="POST"
+          maxLength="60"
+          timeout="10"
+          playBeep="false"
+          finishOnKey="#" />
+</Response>"""
+        # Generate warmup in background for next call
+        async def _gen_warmup():
+            audio = await _run(get_opening_audio, call_sid, timeout=10.0)
+            if audio:
+                call_audio.write_bytes(audio)
+                warmup.write_bytes(audio)
+                print(f"[Incoming] ✅ Warmup generated for next call: {len(audio)} bytes")
+        background_tasks.add_task(_gen_warmup)
 
     return Response(content=xml, media_type="application/xml")
 
