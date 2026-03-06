@@ -500,7 +500,8 @@ async def call_status(request: Request, background_tasks: BackgroundTasks):
 @app.get("/call/audio/opening/{call_sid}")
 async def serve_opening_audio(call_sid: str):
     print(f"[Audio] Opening requested for {call_sid}")
-
+    print(f"[Audio] Files in uploads: {list(UPLOAD_DIR.iterdir())}")
+    
     # Serve call-specific pre-generated file
     path = UPLOAD_DIR / f"opening_{call_sid}.mp3"
     if path.exists():
