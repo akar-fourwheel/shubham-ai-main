@@ -225,29 +225,29 @@ async def incoming_call(request: Request, background_tasks: BackgroundTasks):
         shutil.copy(warmup, call_audio)
         print(f"[Incoming] ✅ Using warmup file")
         xml = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Play>{config.PUBLIC_URL}/call/audio/opening/{call_sid}</Play>
-  <Record action="{config.PUBLIC_URL}/call/gather/{call_sid}"
-          method="POST"
-          maxLength="60"
-          timeout="10"
-          playBeep="false"
-          finishOnKey="#" />
-</Response>"""
+        <Response>
+        <Say>{config.PUBLIC_URL}/call/audio/opening/{call_sid}</Say>
+        <Record action="{config.PUBLIC_URL}/call/gather/{call_sid}"
+                method="POST"
+                maxLength="60"
+                timeout="10"
+                playBeep="false"
+                finishOnKey="#" />
+        </Response>"""
     else:
         # No warmup file — use <Say> immediately, generate warmup in background
         print(f"[Incoming] ⚠️ No warmup file — using Say fallback")
         greeting = "Namaste! Main Priya bol rahi hoon, Shubham Motors Hero MotoCorp se, Jaipur. Aap ka call receive karke bahut khushi hui! Kaise madad kar sakti hoon aapki?"
         xml = f"""<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say>{_xml_safe(greeting)}</Say>
-  <Record action="{config.PUBLIC_URL}/call/gather/{call_sid}"
-          method="POST"
-          maxLength="60"
-          timeout="10"
-          playBeep="false"
-          finishOnKey="#" />
-</Response>"""
+        <Response>
+        <Say>{_xml_safe(greeting)}</Say>
+        <Record action="{config.PUBLIC_URL}/call/gather/{call_sid}"
+                method="POST"
+                maxLength="60"
+                timeout="10"
+                playBeep="false"
+                finishOnKey="#" />
+        </Response>"""
         # Generate warmup in background for next call
         async def _gen_warmup():
             audio = await _run(get_opening_audio, call_sid, timeout=10.0)
@@ -501,7 +501,7 @@ async def call_status(request: Request, background_tasks: BackgroundTasks):
 async def serve_opening_audio(call_sid: str):
     print(f"[Audio] Opening requested for {call_sid}")
     print(f"[Audio] Files in uploads: {list(UPLOAD_DIR.iterdir())}")
-    
+
     # Serve call-specific pre-generated file
     path = UPLOAD_DIR / f"opening_{call_sid}.mp3"
     if path.exists():
