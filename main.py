@@ -240,7 +240,7 @@ async def incoming_call(request: Request, background_tasks: BackgroundTasks):
         greeting = "Namaste! Main Priya bol rahi hoon, Shubham Motors Hero MotoCorp se, Jaipur. Aap ka call receive karke bahut khushi hui! Kaise madad kar sakti hoon aapki?"
         xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say language="hi-IN" voice="woman">{_xml_safe(greeting)}</Say>
+  <Say>{_xml_safe(greeting)}</Say>
   <Record action="{config.PUBLIC_URL}/call/gather/{call_sid}"
           method="POST"
           maxLength="60"
