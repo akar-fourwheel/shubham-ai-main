@@ -63,6 +63,20 @@ async def startup():
         print(f"Catalog load failed: {e} (using fallback data)")
     start_scheduler()
 
+    async def _warm_audio():
+        await asyncio.sleep(5)  # wait for server to fully start
+        from call_handler import get_opening_message
+        from voice import synthesize_speech
+        text = get_opening_message(None, is_inbound=True)
+        audio = synthesize_speech(text, "hinglish")
+        if audio:
+            path = UPLOAD_DIR / "opening_warmup.mp3"
+            path.write_bytes(audio)
+            print(f"[Startup] ✅ Opening audio pre-warmed: {len(audio)} bytes")
+        else:
+            print("[Startup] ⚠️ Audio warmup failed")
+    
+    asyncio.create_task(_warm_audio())
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -469,19 +483,24 @@ async def call_status(request: Request, background_tasks: BackgroundTasks):
 async def serve_opening_audio(call_sid: str):
     print(f"[Audio] Opening requested for {call_sid}")
 
-    # Serve pre-generated file if it exists
+    # Serve call-specific pre-generated file
     path = UPLOAD_DIR / f"opening_{call_sid}.mp3"
     if path.exists():
         print(f"[Audio] ✅ Serving pre-generated file")
         return Response(content=path.read_bytes(), media_type="audio/mpeg")
 
-    # Fallback: generate on-demand
+    # Fallback to warmup file (same greeting, generated at startup)
+    warmup = UPLOAD_DIR / "opening_warmup.mp3"
+    if warmup.exists():
+        print(f"[Audio] ✅ Serving warmup file")
+        return Response(content=warmup.read_bytes(), media_type="audio/mpeg")
+
+    # Last resort: generate on-demand
     audio = await _run(get_opening_audio, call_sid, timeout=10.0)
     if not audio:
         print("[Audio] ❌ No audio returned")
         return Response(status_code=404)
 
-    print(f"[Audio] ✅ Generated on-demand: {len(audio)} bytes")
     return Response(content=audio, media_type="audio/mpeg")
 
 @app.get("/call/audio/response/{call_sid}")
