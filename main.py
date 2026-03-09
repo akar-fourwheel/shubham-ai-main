@@ -156,19 +156,33 @@ def _record_xml(call_sid: str, play_url: str = None, say_text: str = None) -> st
         finishOnKey="#" />
 </Response>"""
 
+# def _download_recording(url: str) -> bytes:
+#     """
+#     Download a <Record> audio file from Exotel.
+#     Exotel requires API key+token authentication for recording URLs.
+#     """
+#     try:
+#         r = _requests.get(
+#             url,
+#             auth=(config.EXOTEL_API_KEY, config.EXOTEL_API_TOKEN),
+#             timeout=15
+#         )
+#         r.raise_for_status()
+#         print(f"[Audio] Downloaded {len(r.content)} bytes from Exotel recording")
+#         return r.content
+#     except Exception as e:
+#         print(f"[Audio] Download failed: {e}")
+#         return b""
+
 def _download_recording(url: str) -> bytes:
-    """
-    Download a <Record> audio file from Exotel.
-    Exotel requires API key+token authentication for recording URLs.
-    """
     try:
         r = _requests.get(
             url,
-            auth=(config.EXOTEL_API_KEY, config.EXOTEL_API_TOKEN),
+            auth=(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN),
             timeout=15
         )
         r.raise_for_status()
-        print(f"[Audio] Downloaded {len(r.content)} bytes from Exotel recording")
+        print(f"[Audio] Downloaded {len(r.content)} bytes from Twilio recording")
         return r.content
     except Exception as e:
         print(f"[Audio] Download failed: {e}")
@@ -196,6 +210,52 @@ async def _run(fn, *args, timeout: float = 12.0):
 
 
 # ── EXOTEL WEBHOOKS ────────────────────────────────────────────────────────────
+# @app.api_route("/call/incoming", methods=["GET", "POST"])
+# async def incoming_call(request: Request, background_tasks: BackgroundTasks):
+#     if request.method == "GET":
+#         data = request.query_params
+#     else:
+#         data = await request.form()
+
+#     call_sid = data.get("CallSid", "").strip()
+#     caller   = data.get("From", "").strip()
+
+#     print(f"\n[Incoming] Call from {caller} | SID: {call_sid}")
+
+#     if not call_sid:
+#         return Response(
+#             content='<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+#             media_type="application/xml"
+#         )
+
+#     start_call_session(call_sid, caller)
+
+#     # Generate warmup in background for next call
+#     warmup = UPLOAD_DIR / "opening_warmup.mp3"
+#     call_audio = UPLOAD_DIR / f"opening_{call_sid}.mp3"
+#     if not warmup.exists():
+#         async def _gen_warmup():
+#             audio = await _run(get_opening_audio, call_sid, timeout=10.0)
+#             if audio:
+#                 call_audio.write_bytes(audio)
+#                 warmup.write_bytes(audio)
+#                 print(f"[Incoming] ✅ Warmup generated: {len(audio)} bytes")
+#         background_tasks.add_task(_gen_warmup)
+
+#     greeting = "Namaste! Main Priya bol rahi hoon, Shubham Motors Hero MotoCorp se, Jaipur. Aap ka call receive karke bahut khushi hui! Kaise madad kar sakti hoon aapki?"
+#     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+# <Response>
+#   <Say>{_xml_safe(greeting)}</Say>
+#   <Record action="{config.PUBLIC_URL}/call/gather/{call_sid}"
+#           method="POST"
+#           maxLength="60"
+#           timeout="10"
+#           playBeep="false"
+#           finishOnKey="#" />
+# </Response>"""
+
+#     return Response(content=xml, media_type="application/xml")
+
 @app.api_route("/call/incoming", methods=["GET", "POST"])
 async def incoming_call(request: Request, background_tasks: BackgroundTasks):
     if request.method == "GET":
@@ -216,22 +276,10 @@ async def incoming_call(request: Request, background_tasks: BackgroundTasks):
 
     start_call_session(call_sid, caller)
 
-    # Generate warmup in background for next call
-    warmup = UPLOAD_DIR / "opening_warmup.mp3"
-    call_audio = UPLOAD_DIR / f"opening_{call_sid}.mp3"
-    if not warmup.exists():
-        async def _gen_warmup():
-            audio = await _run(get_opening_audio, call_sid, timeout=10.0)
-            if audio:
-                call_audio.write_bytes(audio)
-                warmup.write_bytes(audio)
-                print(f"[Incoming] ✅ Warmup generated: {len(audio)} bytes")
-        background_tasks.add_task(_gen_warmup)
-
     greeting = "Namaste! Main Priya bol rahi hoon, Shubham Motors Hero MotoCorp se, Jaipur. Aap ka call receive karke bahut khushi hui! Kaise madad kar sakti hoon aapki?"
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say>{_xml_safe(greeting)}</Say>
+  <Say language="hi-IN">{_xml_safe(greeting)}</Say>
   <Record action="{config.PUBLIC_URL}/call/gather/{call_sid}"
           method="POST"
           maxLength="60"
