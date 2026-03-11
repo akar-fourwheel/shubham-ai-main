@@ -156,37 +156,37 @@ def _record_xml(call_sid: str, play_url: str = None, say_text: str = None) -> st
         finishOnKey="#" />
 </Response>"""
 
-# def _download_recording(url: str) -> bytes:
-#     """
-#     Download a <Record> audio file from Exotel.
-#     Exotel requires API key+token authentication for recording URLs.
-#     """
-#     try:
-#         r = _requests.get(
-#             url,
-#             auth=(config.EXOTEL_API_KEY, config.EXOTEL_API_TOKEN),
-#             timeout=15
-#         )
-#         r.raise_for_status()
-#         print(f"[Audio] Downloaded {len(r.content)} bytes from Exotel recording")
-#         return r.content
-#     except Exception as e:
-#         print(f"[Audio] Download failed: {e}")
-#         return b""
-
 def _download_recording(url: str) -> bytes:
+    """
+    Download a <Record> audio file from Exotel.
+    Exotel requires API key+token authentication for recording URLs.
+    """
     try:
         r = _requests.get(
             url,
-            auth=(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN),
+            auth=(config.EXOTEL_API_KEY, config.EXOTEL_API_TOKEN),
             timeout=15
         )
         r.raise_for_status()
-        print(f"[Audio] Downloaded {len(r.content)} bytes from Twilio recording")
+        print(f"[Audio] Downloaded {len(r.content)} bytes from Exotel recording")
         return r.content
     except Exception as e:
         print(f"[Audio] Download failed: {e}")
         return b""
+
+# def _download_recording(url: str) -> bytes:
+#     try:
+#         r = _requests.get(
+#             url,
+#             auth=(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN),
+#             timeout=15
+#         )
+#         r.raise_for_status()
+#         print(f"[Audio] Downloaded {len(r.content)} bytes from Twilio recording")
+#         return r.content
+#     except Exception as e:
+#         print(f"[Audio] Download failed: {e}")
+#         return b""
 
 
 async def _run(fn, *args, timeout: float = 12.0):
