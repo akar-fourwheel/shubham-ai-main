@@ -63,25 +63,6 @@ async def startup():
         print(f"Catalog load failed: {e} (using fallback data)")
     start_scheduler()
 
-    async def _warm_audio():
-        await asyncio.sleep(5)  # wait for server to fully start
-        from call_handler import get_opening_message
-        from voice import synthesize_speech
-        text = get_opening_message(None, is_inbound=True)
-        audio = synthesize_speech(text, "hinglish")
-        if audio:
-            path = UPLOAD_DIR / "opening_warmup.mp3"
-            path.write_bytes(audio)
-            print(f"[Startup] ✅ Opening audio pre-warmed: {len(audio)} bytes")
-        else:
-            print("[Startup] ⚠️ Audio warmup failed")
-    
-    asyncio.create_task(_warm_audio())
-
-@app.on_event("shutdown")
-async def shutdown():
-    stop_scheduler()
-
 
 # ── HEALTH ─────────────────────────────────────────────────────────────────────
 
