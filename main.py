@@ -30,6 +30,7 @@ from call_handler import (
     start_call_session, get_opening_audio,
     end_call_session, active_calls
 )
+from agent import get_opening_message
 from lead_manager import process_call_result, add_leads_from_import, get_dashboard_stats
 from exotel_client import make_outbound_call
 from scraper import parse_offer_file, scrape_hero_website
