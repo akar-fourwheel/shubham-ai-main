@@ -10,11 +10,13 @@ KEY DESIGN NOTES:
   <Record> captures customer audio → Exotel POSTs RecordingUrl → we download + STT.
 - Always have a <Say> fallback in case Sarvam TTS is slow/unavailable.
 """
-
+import base64
 import os, json, re, io, asyncio
 from pathlib import Path
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
+
+from fastapi import WebSocket, WebSocketDisconnect
 
 import pandas as pd
 import requests as _requests
@@ -631,6 +633,161 @@ async def api_active_calls():
         "call_sids": list(active_calls.keys())
     })
 
+
+# ── VOICEBOT WEBSOCKET ─────────────────────────────────────────────────────────
+
+@app.websocket("/call/stream")
+async def voicebot_stream(websocket: WebSocket):
+    await websocket.accept()
+    call_sid = None
+    audio_buffer = b""
+    
+    print("[Voicebot] WebSocket connected")
+    
+    try:
+        async for message in websocket.iter_text():
+            data = json.loads(message)
+            event = data.get("event", "")
+            
+            # ── Call started ───────────────────────────────────────────
+            if event == "connected":
+                print("[Voicebot] Stream connected")
+            
+            elif event == "start":
+                call_sid = data.get("start", {}).get("callSid", "")
+                caller = data.get("start", {}).get("from", "")
+                print(f"[Voicebot] Call started | SID: {call_sid} | From: {caller}")
+                
+                start_call_session(call_sid, caller)
+                
+                # Send opening greeting immediately
+                session = active_calls.get(call_sid)
+                if session:
+                    greeting = get_opening_message(session.get("lead"), is_inbound=True)
+                    session["conversation"].history.append({
+                        "role": "assistant", "content": greeting
+                    })
+                    
+                    # Generate TTS audio
+                    audio = await _run(synthesize_speech, greeting, "hinglish", timeout=10.0)
+                    if audio:
+                        # Convert MP3 to PCM for Exotel
+                        pcm = await _run(_mp3_to_pcm, audio, timeout=5.0)
+                        if pcm:
+                            b64 = _encode_pcm(pcm)
+                            await websocket.send_text(json.dumps({
+                                "event": "playAudio",
+                                "media": {"payload": b64}
+                            }))
+                            print(f"[Voicebot] Sent greeting audio ({len(pcm)} bytes PCM)")
+            
+            # ── Incoming audio from customer ───────────────────────────
+            elif event == "media":
+                payload = data.get("media", {}).get("payload", "")
+                if payload:
+                    chunk = base64.b64decode(payload)
+                    audio_buffer += chunk
+            
+            # ── Customer stopped speaking ──────────────────────────────
+            elif event == "stop":
+                print(f"[Voicebot] Stream stopped | SID: {call_sid}")
+                if call_sid:
+                    asyncio.create_task(end_call_session(call_sid, 0))
+            
+            # ── Process buffered audio when silence detected ───────────
+            elif event == "mark":
+                if audio_buffer and call_sid and len(audio_buffer) > 3200:
+                    pcm_bytes = audio_buffer
+                    audio_buffer = b""
+                    
+                    # Convert PCM to WAV for Sarvam STT
+                    wav_bytes = _pcm_to_wav(pcm_bytes)
+                    
+                    session = active_calls.get(call_sid)
+                    if not session:
+                        continue
+                    
+                    # STT
+                    stt_result = await _run(transcribe_audio, wav_bytes, "hi-IN", timeout=10.0)
+                    customer_text = stt_result.get("text", "").strip() if stt_result else ""
+                    
+                    print(f"[Voicebot] STT: '{customer_text[:120]}'")
+                    
+                    if not customer_text:
+                        silence_count = session.get("silence_count", 0) + 1
+                        session["silence_count"] = silence_count
+                        if silence_count >= 3:
+                            await websocket.send_text(json.dumps({"event": "stop"}))
+                            continue
+                        retry = "Ji? Kuch suna nahi — thoda louder bolein?"
+                        audio = await _run(synthesize_speech, retry, "hinglish", timeout=8.0)
+                    else:
+                        session["silence_count"] = 0
+                        detected_lang = stt_result.get("language", "hinglish")
+                        session["language"] = detected_lang
+                        
+                        # Groq LLM
+                        conv = session["conversation"]
+                        ai_reply = await _run(conv.chat, customer_text, timeout=15.0)
+                        voice_text = re.sub(r"\{[\s\S]*?\}", "", ai_reply).strip() if ai_reply else ""
+                        
+                        if not voice_text:
+                            voice_text = "Ji, main samajh rahi hoon. Kya aap thoda aur detail de sakte hain?"
+                        
+                        print(f"[Voicebot] Priya: {voice_text[:120]}")
+                        
+                        # TTS
+                        audio = await _run(synthesize_speech, voice_text, detected_lang, timeout=12.0)
+                    
+                    if audio:
+                        pcm = await _run(_mp3_to_pcm, audio, timeout=5.0)
+                        if pcm:
+                            b64 = _encode_pcm(pcm)
+                            await websocket.send_text(json.dumps({
+                                "event": "playAudio",
+                                "media": {"payload": b64}
+                            }))
+    
+    except WebSocketDisconnect:
+        print(f"[Voicebot] WebSocket disconnected | SID: {call_sid}")
+        if call_sid:
+            asyncio.create_task(end_call_session(call_sid, 0))
+    except Exception as e:
+        print(f"[Voicebot] Error: {e}")
+        if call_sid:
+            asyncio.create_task(end_call_session(call_sid, 0))
+
+
+# ── AUDIO CONVERSION HELPERS ───────────────────────────────────────────────────
+
+def _pcm_to_wav(pcm_bytes: bytes, sample_rate: int = 8000) -> bytes:
+    """Convert raw PCM bytes to WAV format for Sarvam STT."""
+    import io, wave
+    buf = io.BytesIO()
+    with wave.open(buf, 'wb') as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)  # 16-bit
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm_bytes)
+    return buf.getvalue()
+
+
+def _mp3_to_pcm(mp3_bytes: bytes) -> bytes:
+    """Convert MP3 bytes to raw PCM 16-bit 8kHz mono for Exotel."""
+    try:
+        from pydub import AudioSegment
+        import io
+        audio = AudioSegment.from_mp3(io.BytesIO(mp3_bytes))
+        audio = audio.set_frame_rate(8000).set_channels(1).set_sample_width(2)
+        return audio.raw_data
+    except Exception as e:
+        print(f"[Audio] MP3 to PCM failed: {e}")
+        return b""
+
+
+def _encode_pcm(pcm_bytes: bytes) -> str:
+    """Base64 encode PCM bytes for Exotel WebSocket."""
+    return base64.b64encode(pcm_bytes).decode("utf-8")
 
 # ── DASHBOARD HTML ─────────────────────────────────────────────────────────────
 
