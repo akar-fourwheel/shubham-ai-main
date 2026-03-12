@@ -641,6 +641,7 @@ async def api_active_calls():
 async def voicebot_stream(websocket: WebSocket):
     await websocket.accept()
     call_sid = None
+    stream_sid = ""
     audio_buffer = b""
     
     print("[Voicebot] WebSocket connected")
@@ -656,6 +657,7 @@ async def voicebot_stream(websocket: WebSocket):
             
             elif event == "start":
                 call_sid = data.get("start", {}).get("callSid", "")
+                stream_sid = data.get("start", {}).get("streamSid", "")
                 caller = data.get("start", {}).get("from", "")
                 print(f"[Voicebot] Call started | SID: {call_sid} | From: {caller}")
                 
@@ -677,7 +679,8 @@ async def voicebot_stream(websocket: WebSocket):
                         if pcm:
                             b64 = _encode_pcm(pcm)
                             await websocket.send_text(json.dumps({
-                                "event": "playAudio",
+                                "event": "media",
+                                "stream_sid": stream_sid,
                                 "media": {"payload": b64}
                             }))
                             print(f"[Voicebot] Sent greeting audio ({len(pcm)} bytes PCM)")
@@ -745,7 +748,8 @@ async def voicebot_stream(websocket: WebSocket):
                         if pcm:
                             b64 = _encode_pcm(pcm)
                             await websocket.send_text(json.dumps({
-                                "event": "playAudio",
+                                "event": "media",
+                                "stream_sid": stream_sid,
                                 "media": {"payload": b64}
                             }))
     
