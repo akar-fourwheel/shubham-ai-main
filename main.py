@@ -774,15 +774,30 @@ def _pcm_to_wav(pcm_bytes: bytes, sample_rate: int = 8000) -> bytes:
 
 
 def _mp3_to_pcm(mp3_bytes: bytes) -> bytes:
-    """Convert MP3 bytes to raw PCM 16-bit 8kHz mono for Exotel."""
+    """Convert audio bytes (WAV or MP3) to raw PCM 16-bit 8kHz mono for Exotel."""
     try:
         from pydub import AudioSegment
         import io
-        audio = AudioSegment.from_mp3(io.BytesIO(mp3_bytes))
+        
+        if not mp3_bytes or len(mp3_bytes) < 100:
+            print(f"[Audio] Audio too small: {len(mp3_bytes)} bytes")
+            return b""
+        
+        # Detect format from magic bytes
+        if mp3_bytes[:4] == b'RIFF':
+            fmt = "wav"
+        elif mp3_bytes[:3] == b'ID3' or mp3_bytes[:2] in (b'\xff\xfb', b'\xff\xf3'):
+            fmt = "mp3"
+        else:
+            fmt = "wav"  # Sarvam default
+        
+        print(f"[Audio] Converting {fmt} ({len(mp3_bytes)} bytes) to PCM")
+        audio = AudioSegment.from_file(io.BytesIO(mp3_bytes), format=fmt)
         audio = audio.set_frame_rate(8000).set_channels(1).set_sample_width(2)
+        print(f"[Audio] PCM ready: {len(audio.raw_data)} bytes")
         return audio.raw_data
     except Exception as e:
-        print(f"[Audio] MP3 to PCM failed: {e}")
+        print(f"[Audio] Audio to PCM failed: {e}")
         return b""
 
 
