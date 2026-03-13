@@ -664,6 +664,11 @@ async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket:
 
     try:
         wav_bytes = await _run(_raw_to_wav, buf, timeout=5.0)
+        if wav_bytes:
+            # Save for inspection
+            with open("/tmp/debug_audio.wav", "wb") as f:
+                f.write(wav_bytes)
+            print(f"[Debug] Saved WAV: {len(wav_bytes)} bytes, header: {wav_bytes[:12]}")
         if not wav_bytes:
             print("[Voicebot] Audio conversion failed")
             return

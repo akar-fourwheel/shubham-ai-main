@@ -102,9 +102,12 @@ def _sarvam_stt(audio_bytes: bytes, language: str = "hi-IN") -> dict:
 
     print(f"[STT] Sending to Sarvam: {len(audio_bytes)} bytes, mime={mime}, lang={language}, first4={audio_bytes[:4]}")
     r = requests.post(SARVAM_STT_URL, headers=headers, files=files, data=data, timeout=15)
-    r.raise_for_status()
+    
+    if not r.ok:
+        print(f"[Voice] Sarvam STT failed: {r.status_code}, response: {r.text[:300]}")
+        raise Exception(f"Sarvam STT {r.status_code}: {r.text[:200]}")
 
-    result    = r.json()
+    result = r.json()
     transcript = result.get("transcript", "")
     lang_code  = result.get("language_code", "hi-IN")
 
@@ -113,7 +116,6 @@ def _sarvam_stt(audio_bytes: bytes, language: str = "hi-IN") -> dict:
         "language":   _normalize_lang(lang_code),
         "confidence": 0.9,
     }
-
 
 def _deepgram_stt(audio_bytes: bytes) -> dict:
     if not config.DEEPGRAM_API_KEY:
