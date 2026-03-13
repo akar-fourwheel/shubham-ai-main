@@ -897,12 +897,21 @@ async def voicebot_stream(websocket: WebSocket):
                         }))
                         print(f"[Voicebot] Sent greeting ({len(pcm)} bytes, cached={bool(_greeting_pcm_cache.get('data'))})")
 
+                        await websocket.send_text(json.dumps({
+                            "event": "mark",
+                            "stream_sid": stream_sid,
+                            "mark": {"name": "greeting_done"}
+                        }))
+                        print("[Voicebot] Sent mark — ready for customer audio")
+
             elif event == "media":
                 payload = data.get("media", {}).get("payload", "")
                 if payload:
                     chunk = base64.b64decode(payload)
                     audio_buffer += chunk
                     last_audio_time = time.monotonic()
+                    if len(audio_buffer) % 32000 == 0:  # log every ~2s of audio
+                        print(f"[Voicebot] Buffer: {len(audio_buffer)} bytes")
 
             elif event == "stop":
                 print(f"[Voicebot] Stream stopped | SID: {call_sid}")
