@@ -688,8 +688,8 @@ async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket:
 
         conv = session["conversation"]
         ai_reply = await _run(conv.chat, customer_text, timeout=15.0)
-        voice_text = re.sub(r"\{[\s\S]*?\}", "", ai_reply).strip() if ai_reply else ""
-
+        voice_text = re.sub(r"\{.*", "", ai_reply, flags=re.DOTALL).strip() if ai_reply else ""
+        
         if not voice_text:
             voice_text = "Ji, main samajh rahi hoon. Kya aap thoda aur detail de sakte hain?"
 

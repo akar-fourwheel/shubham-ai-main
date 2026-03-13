@@ -78,20 +78,6 @@ At end of call, mentally classify:
 - COLD ❄️: Vague interest, no timeline, needs nurturing
 - DEAD ☠️: Wrong number, not interested at all, said don't call again
 
-=== WHAT TO EXTRACT FROM EVERY CALL ===
-After every call, output a JSON block (hidden from customer) with:
-{{
-  "customer_name": "",
-  "interested_model": "",
-  "budget": "",
-  "temperature": "hot/warm/cold/dead",
-  "next_followup_date": "YYYY-MM-DD HH:MM or null",
-  "next_action": "schedule_visit / send_info / followup_call / assign_salesperson / close_dead",
-  "notes": "key points from call",
-  "convert_to_sale": true/false,
-  "assign_to_salesperson": true/false
-}}
-
 {catalog_text}
 {offer_text}
 {lead_context}
