@@ -896,6 +896,7 @@ async def voicebot_stream(websocket: WebSocket):
                 if payload:
                     chunk = base64.b64decode(payload)
                     audio_buffer += chunk
+                    print(f"[Voicebot] Audio buffer: {len(audio_buffer)} bytes")
 
             elif event == "stop":
                 print(f"[Voicebot] Stream stopped | SID: {call_sid}")
