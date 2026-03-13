@@ -95,7 +95,7 @@ def _sarvam_stt(audio_bytes: bytes, language: str = "hi-IN") -> dict:
     headers = {"api-subscription-key": config.SARVAM_API_KEY}
     files   = {"file": (f"audio.{ext}", io.BytesIO(audio_bytes), mime)}
     data    = {
-        "model":           "saarika:v2",
+        "model":           "saarika:v2.5",
         "language_code":   language,
         "with_timestamps": "false",
     }
