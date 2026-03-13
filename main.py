@@ -849,6 +849,7 @@ async def voicebot_stream(websocket: WebSocket):
     audio_buffer = b""
     processing = False
     greeting_done_time = time.monotonic()
+    active_tasks = 0
 
     try:
         async for message in websocket.iter_text():
@@ -907,20 +908,20 @@ async def voicebot_stream(websocket: WebSocket):
                 chunk = base64.b64decode(payload)
                 audio_buffer += chunk
 
-                if len(audio_buffer) >= 64000 and not processing:
-                        print(f"[Voicebot] Processing {len(audio_buffer)} bytes")
-                        buf = audio_buffer
-                        audio_buffer = b""
-                        processing = True
+                if len(audio_buffer) >= 64000 and active_tasks == 0:
+                    print(f"[Voicebot] Processing {len(audio_buffer)} bytes")
+                    buf = audio_buffer
+                    audio_buffer = b""
+                    active_tasks += 1
 
-                        async def handle_speech(b=buf):
-                            nonlocal processing
-                            try:
-                                await _process_speech(b, call_sid, stream_sid, websocket)
-                            finally:
-                                processing = False
+                    async def handle_speech(b=buf):
+                        nonlocal active_tasks
+                        try:
+                            await _process_speech(b, call_sid, stream_sid, websocket)
+                        finally:
+                            active_tasks -= 1
 
-                        asyncio.create_task(handle_speech())
+                    asyncio.create_task(handle_speech())
                 else:
                     silence_chunks = 0
                     speaking = True
@@ -1010,22 +1011,34 @@ def _encode_pcm(pcm_bytes: bytes) -> str:
     return base64.b64encode(pcm_bytes).decode("utf-8")
 
 def _raw_to_wav(raw_bytes: bytes) -> bytes:
-    """Convert Exotel's compressed audio to WAV 16kHz mono for Sarvam STT."""
+    """Convert Exotel audio to WAV 16kHz mono for Sarvam STT."""
     try:
         from pydub import AudioSegment
         import io
-        # Try to load as raw mulaw 8kHz (most common Exotel format)
-        audio = AudioSegment(
-            data=raw_bytes,
-            sample_width=1,      # mulaw = 1 byte per sample
-            frame_rate=8000,
-            channels=1
-        )
+        # Exotel sends base64-decoded compressed audio at 8kHz
+        # Try loading as raw mulaw first, then fall back to letting pydub detect
+        try:
+            audio = AudioSegment.from_file(io.BytesIO(raw_bytes), format="mp3")
+            print(f"[STT] Decoded as MP3")
+        except Exception:
+            try:
+                audio = AudioSegment.from_file(io.BytesIO(raw_bytes), format="wav")
+                print(f"[STT] Decoded as WAV")
+            except Exception:
+                # Last resort: treat as raw mulaw
+                audio = AudioSegment(
+                    data=raw_bytes,
+                    sample_width=1,
+                    frame_rate=8000,
+                    channels=1
+                )
+                print(f"[STT] Decoded as raw mulaw")
+        
         audio = audio.set_frame_rate(16000).set_channels(1).set_sample_width(2)
         buf = io.BytesIO()
         audio.export(buf, format="wav")
         wav = buf.getvalue()
-        print(f"[STT] Converted to WAV: {len(wav)} bytes")
+        print(f"[STT] WAV ready: {len(wav)} bytes, duration: {len(audio)/1000:.1f}s")
         return wav
     except Exception as e:
         print(f"[STT] Conversion failed: {e}")
