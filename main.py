@@ -11,7 +11,7 @@ KEY DESIGN NOTES:
 - Always have a <Say> fallback in case Sarvam TTS is slow/unavailable.
 """
 import base64
-import os, json, re, io, asyncio
+import os, json, re, io, asyncio, time
 from pathlib import Path
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
@@ -23,7 +23,7 @@ import requests as _requests
 from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 import uvicorn
-import time
+import numpy as np 
 
 import config
 import sheets_manager as db
@@ -100,6 +100,13 @@ async def health():
 
 
 # ── HELPER FUNCTIONS ───────────────────────────────────────────────────────────
+
+def _is_silence(pcm_chunk: bytes, threshold: int = 400) -> bool:
+    if len(pcm_chunk) < 2:
+        return True
+    samples = np.frombuffer(pcm_chunk, dtype=np.int16)
+    rms = float(np.sqrt(np.mean(samples.astype(np.float32) ** 2)))
+    return rms < threshold
 
 def _hangup_xml() -> str:
     return '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>'
@@ -650,6 +657,46 @@ async def api_active_calls():
         "call_sids": list(active_calls.keys())
     })
 
+async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket: WebSocket):
+    session = active_calls.get(call_sid)
+    if not session:
+        return
+
+    try:
+        wav_bytes = _pcm_to_wav(buf)
+        stt_result = await _run(transcribe_audio, wav_bytes, "hi-IN", timeout=10.0)
+        customer_text = stt_result.get("text", "").strip() if stt_result else ""
+        print(f"[Voicebot] STT: '{customer_text[:120]}'")
+
+        if not customer_text:
+            return
+
+        detected_lang = stt_result.get("language", "hinglish")
+        session["language"] = detected_lang
+
+        conv = session["conversation"]
+        ai_reply = await _run(conv.chat, customer_text, timeout=15.0)
+        voice_text = re.sub(r"\{[\s\S]*?\}", "", ai_reply).strip() if ai_reply else ""
+
+        if not voice_text:
+            voice_text = "Ji, main samajh rahi hoon. Kya aap thoda aur detail de sakte hain?"
+
+        print(f"[Voicebot] Priya: {voice_text[:120]}")
+
+        audio = await _run(synthesize_speech, voice_text, detected_lang, timeout=12.0)
+        if audio:
+            pcm = await _run(_mp3_to_pcm, audio, timeout=5.0)
+            if pcm:
+                b64 = base64.b64encode(pcm).decode("ascii")
+                await websocket.send_text(json.dumps({
+                    "event": "media",
+                    "stream_sid": stream_sid,
+                    "media": {"payload": b64}
+                }))
+                print(f"[Voicebot] Sent response ({len(pcm)} bytes)")
+
+    except Exception as e:
+        print(f"[Voicebot] _process_speech error: {e}")
 
 # ── VOICEBOT WEBSOCKET ─────────────────────────────────────────────────────────
 
@@ -782,82 +829,17 @@ async def api_active_calls():
 #         if call_sid:
 #             asyncio.create_task(end_call_session(call_sid, 0))
 
-
 @app.websocket("/call/stream")
 async def voicebot_stream(websocket: WebSocket):
     await websocket.accept()
+    print("[Voicebot] WebSocket connected")
+
     call_sid = None
     stream_sid = ""
     audio_buffer = b""
-    last_audio_time = time.monotonic()
+    silence_chunks = 0
+    speaking = False
     processing = False
-
-    print("[Voicebot] WebSocket connected")
-
-    async def process_buffer():
-        nonlocal audio_buffer, processing, last_audio_time
-        while True:
-            await asyncio.sleep(0.5)  # check every 1.5s
-            if not call_sid or processing:
-                continue
-            if not audio_buffer:
-                continue
-            # If we have audio and nothing new came in last 1.5s — process it
-            if(time.monotonic()-last_audio_time) < 1.5:
-                continue
-            
-            buf = audio_buffer
-            audio_buffer = b""
-            if len(buf) < 3200:
-                continue
-
-            processing = True
-            try:
-                session = active_calls.get(call_sid)
-                if not session:
-                    continue
-
-                wav_bytes = _pcm_to_wav(buf)
-                stt_result = await _run(transcribe_audio, wav_bytes, "hi-IN", timeout=10.0)
-                customer_text = stt_result.get("text", "").strip() if stt_result else ""
-                print(f"[Voicebot] STT: '{customer_text[:120]}'")
-
-                if not customer_text:
-                    silence_count = session.get("silence_count", 0) + 1
-                    session["silence_count"] = silence_count
-                    if silence_count >= 3:
-                        await websocket.send_text(json.dumps({"event": "stop"}))
-                    return
-                
-                session["silence_count"] = 0
-                detected_lang = stt_result.get("language", "hinglish")
-                session["language"] = detected_lang
-
-                conv = session["conversation"]
-                ai_reply = await _run(conv.chat, customer_text, timeout=15.0)
-                voice_text = re.sub(r"\{[\s\S]*?\}", "", ai_reply).strip() if ai_reply else ""
-
-                if not voice_text:
-                    voice_text = "Ji, main samajh rahi hoon. Kya aap thoda aur detail de sakte hain?"
-
-                print(f"[Voicebot] Priya: {voice_text[:120]}")
-
-                audio = await _run(synthesize_speech, voice_text, detected_lang, timeout=12.0)
-                if audio:
-                    pcm = await _run(_mp3_to_pcm, audio, timeout=5.0)
-                    if pcm:
-                        b64 = base64.b64encode(pcm).decode("ascii")
-                        await websocket.send_text(json.dumps({
-                            "event": "media",
-                            "stream_sid": stream_sid,
-                            "media": {"payload": b64}
-                        }))
-            except Exception as e:
-                print(f"[Voicebot] Process error: {e}")
-            finally:
-                processing = False
-
-    asyncio.create_task(process_buffer())
 
     try:
         async for message in websocket.iter_text():
@@ -868,9 +850,10 @@ async def voicebot_stream(websocket: WebSocket):
                 print("[Voicebot] Stream connected")
 
             elif event == "start":
-                call_sid = data.get("start", {}).get("callSid", "")
-                stream_sid = data.get("start", {}).get("streamSid", "")
-                caller = data.get("start", {}).get("from", "")
+                start_data = data.get("start", {})
+                call_sid = start_data.get("callSid") or start_data.get("call_sid") or ""
+                stream_sid = start_data.get("streamSid") or start_data.get("stream_sid") or ""
+                caller = start_data.get("from", "")
                 print(f"[Voicebot] Call started | SID: {call_sid} | From: {caller}")
 
                 start_call_session(call_sid, caller)
@@ -895,23 +878,63 @@ async def voicebot_stream(websocket: WebSocket):
                             "stream_sid": stream_sid,
                             "media": {"payload": b64}
                         }))
-                        print(f"[Voicebot] Sent greeting ({len(pcm)} bytes, cached={bool(_greeting_pcm_cache.get('data'))})")
-
+                        print(f"[Voicebot] Sent greeting ({len(pcm)} bytes)")
                         await websocket.send_text(json.dumps({
                             "event": "mark",
                             "stream_sid": stream_sid,
                             "mark": {"name": "greeting_done"}
                         }))
-                        print("[Voicebot] Sent mark — ready for customer audio")
 
             elif event == "media":
+                if processing:
+                    continue  # ignore audio while we're responding
+
                 payload = data.get("media", {}).get("payload", "")
-                if payload:
-                    chunk = base64.b64decode(payload)
+                if not payload:
+                    continue
+
+                chunk = base64.b64decode(payload)
+
+                if _is_silence(chunk):
+                    silence_chunks += 1
+                    # 20 × 20ms chunks = 400ms of silence after speech → end of utterance
+                    if speaking and silence_chunks >= 20 and len(audio_buffer) >= 6400:
+                        print(f"[Voicebot] Utterance complete — {len(audio_buffer)} bytes")
+                        buf = audio_buffer
+                        audio_buffer = b""
+                        silence_chunks = 0
+                        speaking = False
+                        processing = True
+
+                        async def handle_speech(b=buf):
+                            nonlocal processing
+                            try:
+                                await _process_speech(b, call_sid, stream_sid, websocket)
+                            finally:
+                                processing = False
+
+                        asyncio.create_task(handle_speech())
+                else:
+                    silence_chunks = 0
+                    speaking = True
                     audio_buffer += chunk
-                    last_audio_time = time.monotonic()
-                    if len(audio_buffer) % 32000 == 0:  # log every ~2s of audio
-                        print(f"[Voicebot] Buffer: {len(audio_buffer)} bytes")
+
+                    # Safety cap — force process if buffer exceeds 10s
+                    if len(audio_buffer) >= 160000 and not processing:
+                        print(f"[Voicebot] Buffer cap reached — forcing STT")
+                        buf = audio_buffer
+                        audio_buffer = b""
+                        speaking = False
+                        processing = True
+
+                        async def handle_cap(b=buf):
+                            nonlocal processing
+                            try:
+                                await _process_speech(b, call_sid, stream_sid, websocket)
+                            finally:
+                                processing = False
+
+                        asyncio.create_task(handle_cap())
 
             elif event == "stop":
                 print(f"[Voicebot] Stream stopped | SID: {call_sid}")
@@ -919,7 +942,7 @@ async def voicebot_stream(websocket: WebSocket):
                     asyncio.create_task(end_call_session(call_sid, 0))
 
             elif event == "mark":
-                print(f"[Voicebot] Mark received")
+                print(f"[Voicebot] Mark received: {data.get('mark', {}).get('name', '')}")
 
     except WebSocketDisconnect:
         print(f"[Voicebot] Disconnected | SID: {call_sid}")
