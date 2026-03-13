@@ -23,6 +23,7 @@ import requests as _requests
 from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 import uvicorn
+import time
 
 import config
 import sheets_manager as db
@@ -788,7 +789,7 @@ async def voicebot_stream(websocket: WebSocket):
     call_sid = None
     stream_sid = ""
     audio_buffer = b""
-    last_audio_time = 0
+    last_audio_time = time.monotonic()
     processing = False
 
     print("[Voicebot] WebSocket connected")
@@ -796,13 +797,13 @@ async def voicebot_stream(websocket: WebSocket):
     async def process_buffer():
         nonlocal audio_buffer, processing, last_audio_time
         while True:
-            await asyncio.sleep(1.5)  # check every 1.5s
+            await asyncio.sleep(0.5)  # check every 1.5s
             if not call_sid or processing:
                 continue
             if not audio_buffer:
                 continue
             # If we have audio and nothing new came in last 1.5s — process it
-            if(asyncio.get_event_loop().time()-last_audio_time) < 1.5:
+            if(time.monotonic()-last_audio_time) < 1.5:
                 continue
             
             buf = audio_buffer
@@ -901,8 +902,7 @@ async def voicebot_stream(websocket: WebSocket):
                 if payload:
                     chunk = base64.b64decode(payload)
                     audio_buffer += chunk
-                    last_audio_time = asyncio.get_event_loop().time()
-                    print(f"[Voicebot] Audio buffer: {len(audio_buffer)} bytes")
+                    last_audio_time = time.monotonic()
 
             elif event == "stop":
                 print(f"[Voicebot] Stream stopped | SID: {call_sid}")
