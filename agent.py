@@ -103,6 +103,7 @@ After every call, output a JSON block (hidden from customer) with:
 - If customer asks for something you don't know → "Main confirm karke aapko bata deta/deti hoon"
 - Keep calls under 5 minutes unless customer is engaged and hot
 - Always end with a clear next step
+- PHONE CALL RULES: Keep EVERY response to maximum 2 sentences. Ask only ONE question per turn. Never give long lists or specs on a call — save details for WhatsApp follow-up.
 """
 
 
@@ -123,7 +124,7 @@ class ConversationManager:
             model=config.GROQ_MODEL,
             messages=[{"role": "system", "content": self.system_prompt}] + self.history,
             temperature=0.8,
-            max_tokens=300,
+            max_tokens=80,
         )
         
         ai_reply = response.choices[0].message.content

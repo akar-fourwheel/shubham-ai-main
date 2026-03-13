@@ -101,12 +101,11 @@ async def health():
 
 # ── HELPER FUNCTIONS ───────────────────────────────────────────────────────────
 
-# def _is_silence(pcm_chunk: bytes, threshold: int = 1500) -> bool:
-#     if len(pcm_chunk) < 2:
-#         return True
-#     samples = np.frombuffer(pcm_chunk, dtype=np.int16)
-#     rms = float(np.sqrt(np.mean(samples.astype(np.float32) ** 2)))
-#     return rms < threshold
+def _is_silence(pcm: bytes, threshold: int = 200) -> bool:
+    samples = np.frombuffer(pcm, dtype=np.int16)
+    rms = float(np.sqrt(np.mean(samples.astype(np.float32) ** 2)))
+    print(f"[VAD] RMS: {rms:.0f}")
+    return rms < threshold
 
 def _hangup_xml() -> str:
     return '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>'
@@ -657,12 +656,15 @@ async def api_active_calls():
         "call_sids": list(active_calls.keys())
     })
 
-async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket: WebSocket):
+async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket: WebSocket, state: dict):
     session = active_calls.get(call_sid)
     if not session:
         return
-    if len(buf) < 8000:  # ignore tiny buffers — just silence
+    if len(buf) < 8000:
         print(f"[Voicebot] Buffer too small ({len(buf)} bytes), skipping")
+        return
+    if _is_silence(buf):
+        print("[Voicebot] Silence detected, skipping STT")
         return
     try:
         wav_bytes = _pcm_to_wav(buf)
@@ -704,6 +706,9 @@ async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket:
                     "media": {"payload": b64}
                 }))
                 print(f"[Voicebot] Sent response ({len(pcm)} bytes)")
+                response_secs = len(pcm) / 16000  # 8kHz 16-bit = 16000 bytes/sec
+                state["listen_after"] = time.monotonic() + response_secs + 0.8
+                print(f"[Voicebot] Blocking input for {response_secs:.1f}s")
 
     except Exception as e:
         print(f"[Voicebot] _process_speech error: {e}")
@@ -847,7 +852,7 @@ async def voicebot_stream(websocket: WebSocket):
     call_sid = None
     stream_sid = ""
     audio_buffer = b""
-    greeting_done_time = 0.0
+    state = {"listen_after": 0.0}
     _busy = [False]
 
     try:
@@ -888,7 +893,9 @@ async def voicebot_stream(websocket: WebSocket):
                             "stream_sid": stream_sid,
                             "media": {"payload": b64}
                         }))
-                        print(f"[Voicebot] Sent greeting ({len(pcm)} bytes)")
+                        greeting_secs = len(pcm) / 16000
+                        state["listen_after"] = time.monotonic() + greeting_secs + 1.0
+                        print(f"[Voicebot] Sent greeting ({len(pcm)} bytes), blocking {greeting_secs:.1f}s")
                         await websocket.send_text(json.dumps({
                             "event": "mark",
                             "stream_sid": stream_sid,
@@ -898,9 +905,7 @@ async def voicebot_stream(websocket: WebSocket):
             elif event == "media":
                 if _busy[0]:
                     continue
-                if greeting_done_time == 0.0:  # mark not received yet
-                    continue
-                if (time.monotonic() - greeting_done_time) < 2.0:
+                if time.monotonic() < state["listen_after"]:
                     continue
                 payload = data.get("media", {}).get("payload", "")
                 if not payload:
@@ -916,7 +921,7 @@ async def voicebot_stream(websocket: WebSocket):
 
                     async def handle_speech(b=buf):
                         try:
-                            await _process_speech(b, call_sid, stream_sid, websocket)
+                            await _process_speech(b, call_sid, stream_sid, websocket, state)
                         finally:
                             _busy[0] = False
 
@@ -930,8 +935,6 @@ async def voicebot_stream(websocket: WebSocket):
             elif event == "mark":
                 name = data.get('mark', {}).get('name', '')
                 print(f"[Voicebot] Mark received: {name}")
-                if name == "greeting_done":
-                    greeting_done_time = time.monotonic()
 
     except WebSocketDisconnect:
         print(f"[Voicebot] Disconnected | SID: {call_sid}")
@@ -987,43 +990,6 @@ def _mp3_to_pcm(mp3_bytes: bytes) -> bytes:
 def _encode_pcm(pcm_bytes: bytes) -> str:
     """Base64 encode PCM bytes for Exotel WebSocket."""
     return base64.b64encode(pcm_bytes).decode("utf-8")
-
-def _raw_to_wav(raw_bytes: bytes) -> bytes:
-    """Convert Exotel audio to WAV 16kHz mono for Sarvam STT."""
-    print(f"[STT] Raw bytes first 16: {raw_bytes[:16].hex()}")
-    print(f"[STT] Raw bytes last 4: {raw_bytes[-4:].hex()}")
-
-    try:
-        from pydub import AudioSegment
-        import io
-        # Exotel sends base64-decoded compressed audio at 8kHz
-        # Try loading as raw mulaw first, then fall back to letting pydub detect
-        try:
-            audio = AudioSegment.from_file(io.BytesIO(raw_bytes), format="mp3")
-            print(f"[STT] Decoded as MP3")
-        except Exception:
-            try:
-                audio = AudioSegment.from_file(io.BytesIO(raw_bytes), format="wav")
-                print(f"[STT] Decoded as WAV")
-            except Exception:
-                # Last resort: treat as raw mulaw
-                audio = AudioSegment(
-                    data=raw_bytes,
-                    sample_width=1,
-                    frame_rate=8000,
-                    channels=1
-                )
-                print(f"[STT] Decoded as raw mulaw")
-        
-        audio = audio.set_frame_rate(16000).set_channels(1).set_sample_width(2)
-        buf = io.BytesIO()
-        audio.export(buf, format="wav")
-        wav = buf.getvalue()
-        print(f"[STT] WAV ready: {len(wav)} bytes, duration: {len(audio)/1000:.1f}s")
-        return wav
-    except Exception as e:
-        print(f"[STT] Conversion failed: {e}")
-        return b""
 
 # ── DASHBOARD HTML ─────────────────────────────────────────────────────────────
 
