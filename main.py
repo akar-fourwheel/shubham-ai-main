@@ -665,7 +665,7 @@ async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket:
         print(f"[Voicebot] Buffer too small ({len(buf)} bytes), skipping")
         return
     try:
-        wav_bytes = await _run(_raw_to_wav, buf, timeout=5.0)
+        wav_bytes = _pcm_to_wav(buf)
         if wav_bytes:
             # Save for inspection
             with open("/tmp/debug_audio.wav", "wb") as f:
@@ -847,7 +847,7 @@ async def voicebot_stream(websocket: WebSocket):
     call_sid = None
     stream_sid = ""
     audio_buffer = b""
-    greeting_done_time = time.monotonic()
+    greeting_done_time = 0.0
     _busy = [False]
 
     try:
@@ -896,7 +896,11 @@ async def voicebot_stream(websocket: WebSocket):
                         }))
 
             elif event == "media":
-                if (time.monotonic() - greeting_done_time) < 3.0:
+                if _busy[0]:
+                    continue
+                if greeting_done_time == 0.0:  # mark not received yet
+                    continue
+                if (time.monotonic() - greeting_done_time) < 2.0:
                     continue
                 payload = data.get("media", {}).get("payload", "")
                 if not payload:
