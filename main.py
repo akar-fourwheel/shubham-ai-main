@@ -101,7 +101,7 @@ async def health():
 
 # ── HELPER FUNCTIONS ───────────────────────────────────────────────────────────
 
-def _is_silence(pcm_chunk: bytes, threshold: int = 400) -> bool:
+def _is_silence(pcm_chunk: bytes, threshold: int = 600) -> bool:
     if len(pcm_chunk) < 2:
         return True
     samples = np.frombuffer(pcm_chunk, dtype=np.int16)
@@ -898,7 +898,7 @@ async def voicebot_stream(websocket: WebSocket):
                 if _is_silence(chunk):
                     silence_chunks += 1
                     # 20 × 20ms chunks = 400ms of silence after speech → end of utterance
-                    if speaking and silence_chunks >= 20 and len(audio_buffer) >= 6400:
+                    if speaking and silence_chunks >= 20 and len(audio_buffer) >= 16000:
                         print(f"[Voicebot] Utterance complete — {len(audio_buffer)} bytes")
                         buf = audio_buffer
                         audio_buffer = b""
@@ -939,7 +939,7 @@ async def voicebot_stream(websocket: WebSocket):
             elif event == "stop":
                 print(f"[Voicebot] Stream stopped | SID: {call_sid}")
                 if call_sid:
-                    asyncio.create_task(end_call_session(call_sid, 0))
+                    end_call_session(call_sid, 0)
 
             elif event == "mark":
                 print(f"[Voicebot] Mark received: {data.get('mark', {}).get('name', '')}")
@@ -947,11 +947,11 @@ async def voicebot_stream(websocket: WebSocket):
     except WebSocketDisconnect:
         print(f"[Voicebot] Disconnected | SID: {call_sid}")
         if call_sid:
-            asyncio.create_task(end_call_session(call_sid, 0))
+            end_call_session(call_sid, 0)
     except Exception as e:
         print(f"[Voicebot] Error: {e}")
         if call_sid:
-            asyncio.create_task(end_call_session(call_sid, 0))
+            end_call_session(call_sid, 0)
 
 # ── AUDIO CONVERSION HELPERS ───────────────────────────────────────────────────
 
