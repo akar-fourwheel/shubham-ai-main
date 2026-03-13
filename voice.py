@@ -100,6 +100,7 @@ def _sarvam_stt(audio_bytes: bytes, language: str = "hi-IN") -> dict:
         "with_timestamps": "false",
     }
 
+    print(f"[STT] Sending to Sarvam: {len(audio_bytes)} bytes, mime={mime}, lang={language}, first4={audio_bytes[:4]}")
     r = requests.post(SARVAM_STT_URL, headers=headers, files=files, data=data, timeout=15)
     r.raise_for_status()
 

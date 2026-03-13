@@ -101,7 +101,7 @@ async def health():
 
 # ── HELPER FUNCTIONS ───────────────────────────────────────────────────────────
 
-def _is_silence(pcm_chunk: bytes, threshold: int = 600) -> bool:
+def _is_silence(pcm_chunk: bytes, threshold: int = 1500) -> bool:
     if len(pcm_chunk) < 2:
         return True
     samples = np.frombuffer(pcm_chunk, dtype=np.int16)
@@ -851,6 +851,7 @@ async def voicebot_stream(websocket: WebSocket):
 
             elif event == "start":
                 start_data = data.get("start", {})
+                print(f"[Voicebot] Start event full data: {json.dumps(start_data)}")
                 call_sid = start_data.get("callSid") or start_data.get("call_sid") or ""
                 stream_sid = start_data.get("streamSid") or start_data.get("stream_sid") or ""
                 caller = start_data.get("from", "")
