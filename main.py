@@ -42,6 +42,7 @@ from keep_alive import keep_alive
 app = FastAPI(title="Shubham Motors AI Agent", version="2.1.0")
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
+_greeting_pcm_cache = {}
 
 # Thread pool for ALL blocking I/O (Sarvam TTS, Deepgram STT, Groq LLM)
 # This prevents blocking the FastAPI async event loop
@@ -66,6 +67,20 @@ async def startup():
         print(f"Catalog load failed: {e} (using fallback data)")
     start_scheduler()
 
+    async def _prewarm():
+        await asyncio.sleep(3)  # let server fully start first
+        from agent import get_opening_message
+        text = get_opening_message(None, is_inbound=True)
+        audio = await _run(synthesize_speech, text, "hinglish", timeout=15.0)
+        if audio:
+            pcm = await _run(_mp3_to_pcm, audio, timeout=5.0)
+            if pcm:
+                _greeting_pcm_cache["data"] = pcm
+                print(f"[Startup] ✅ Greeting PCM cached: {len(pcm)} bytes")
+        else:
+            print("[Startup] ⚠️ Greeting prewarm failed")
+    
+    asyncio.create_task(_prewarm())
 
 # ── HEALTH ─────────────────────────────────────────────────────────────────────
 
@@ -671,19 +686,23 @@ async def voicebot_stream(websocket: WebSocket):
                         "role": "assistant", "content": greeting
                     })
                     
+                    pcm = _greeting_pcm_cache.get("data")
+
                     # Generate TTS audio
-                    audio = await _run(synthesize_speech, greeting, "hinglish", timeout=10.0)
-                    if audio:
-                        # Convert MP3 to PCM for Exotel
-                        pcm = await _run(_mp3_to_pcm, audio, timeout=5.0)
-                        if pcm:
-                            b64 = _encode_pcm(pcm)
-                            await websocket.send_text(json.dumps({
-                                "event": "media",
-                                "stream_sid": stream_sid,
-                                "media": {"payload": b64}
-                            }))
-                            print(f"[Voicebot] Sent greeting audio ({len(pcm)} bytes PCM)")
+                    if not pcm:
+                         # Cache miss — generate on the fly (first call after deploy)
+                        audio = await _run(synthesize_speech, greeting, "hinglish", timeout=10.0)
+                        if audio:
+                            pcm = await _run(_mp3_to_pcm, audio, timeout=5.0)
+        
+                    if pcm:
+                        b64 = base64.b64encode(pcm).decode("ascii")
+                        await websocket.send_text(json.dumps({
+                            "event": "media",
+                            "stream_sid": stream_sid,
+                            "media": {"payload": b64}
+                        }))
+                        print(f"[Voicebot] Sent greeting ({len(pcm)} bytes, cached={bool(_greeting_pcm_cache.get('data'))})")
             
             # ── Incoming audio from customer ───────────────────────────
             elif event == "media":
