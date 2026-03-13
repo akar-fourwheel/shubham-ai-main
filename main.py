@@ -847,9 +847,8 @@ async def voicebot_stream(websocket: WebSocket):
     call_sid = None
     stream_sid = ""
     audio_buffer = b""
-    processing = False
     greeting_done_time = time.monotonic()
-    active_tasks = 0
+    _busy = [False]
 
     try:
         async for message in websocket.iter_text():
@@ -908,41 +907,18 @@ async def voicebot_stream(websocket: WebSocket):
                 chunk = base64.b64decode(payload)
                 audio_buffer += chunk
 
-                if len(audio_buffer) >= 64000 and active_tasks == 0:
-                    print(f"[Voicebot] Processing {len(audio_buffer)} bytes")
+                if len(audio_buffer) >= 64000 and not _busy[0]:
                     buf = audio_buffer
                     audio_buffer = b""
-                    active_tasks += 1
+                    _busy[0] = True
 
                     async def handle_speech(b=buf):
-                        nonlocal active_tasks
                         try:
                             await _process_speech(b, call_sid, stream_sid, websocket)
                         finally:
-                            active_tasks -= 1
+                            _busy[0] = False
 
                     asyncio.create_task(handle_speech())
-                else:
-                    silence_chunks = 0
-                    speaking = True
-                    audio_buffer += chunk
-
-                    # Safety cap — force process if buffer exceeds 10s
-                    if len(audio_buffer) >= 160000 and not processing:
-                        print(f"[Voicebot] Buffer cap reached — forcing STT")
-                        buf = audio_buffer
-                        audio_buffer = b""
-                        speaking = False
-                        processing = True
-
-                        async def handle_cap(b=buf):
-                            nonlocal processing
-                            try:
-                                await _process_speech(b, call_sid, stream_sid, websocket)
-                            finally:
-                                processing = False
-
-                        asyncio.create_task(handle_cap())
 
             elif event == "stop":
                 print(f"[Voicebot] Stream stopped | SID: {call_sid}")
@@ -1012,6 +988,9 @@ def _encode_pcm(pcm_bytes: bytes) -> str:
 
 def _raw_to_wav(raw_bytes: bytes) -> bytes:
     """Convert Exotel audio to WAV 16kHz mono for Sarvam STT."""
+    print(f"[STT] Raw bytes first 16: {raw_bytes[:16].hex()}")
+    print(f"[STT] Raw bytes last 4: {raw_bytes[-4:].hex()}")
+
     try:
         from pydub import AudioSegment
         import io
