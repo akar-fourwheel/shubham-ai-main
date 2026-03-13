@@ -101,12 +101,12 @@ async def health():
 
 # ── HELPER FUNCTIONS ───────────────────────────────────────────────────────────
 
-def _is_silence(pcm_chunk: bytes, threshold: int = 1500) -> bool:
-    if len(pcm_chunk) < 2:
-        return True
-    samples = np.frombuffer(pcm_chunk, dtype=np.int16)
-    rms = float(np.sqrt(np.mean(samples.astype(np.float32) ** 2)))
-    return rms < threshold
+# def _is_silence(pcm_chunk: bytes, threshold: int = 1500) -> bool:
+#     if len(pcm_chunk) < 2:
+#         return True
+#     samples = np.frombuffer(pcm_chunk, dtype=np.int16)
+#     rms = float(np.sqrt(np.mean(samples.astype(np.float32) ** 2)))
+#     return rms < threshold
 
 def _hangup_xml() -> str:
     return '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>'
@@ -663,7 +663,10 @@ async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket:
         return
 
     try:
-        wav_bytes = _pcm_to_wav(buf)
+        wav_bytes = await _run(_raw_to_wav, buf, timeout=5.0)
+        if not wav_bytes:
+            print("[Voicebot] Audio conversion failed")
+            return
         stt_result = await _run(transcribe_audio, wav_bytes, "hi-IN", timeout=10.0)
         customer_text = stt_result.get("text", "").strip() if stt_result else ""
         print(f"[Voicebot] STT: '{customer_text[:120]}'")
@@ -837,9 +840,8 @@ async def voicebot_stream(websocket: WebSocket):
     call_sid = None
     stream_sid = ""
     audio_buffer = b""
-    silence_chunks = 0
-    speaking = False
     processing = False
+    greeting_done_time = 0.0
 
     try:
         async for message in websocket.iter_text():
@@ -889,22 +891,19 @@ async def voicebot_stream(websocket: WebSocket):
             elif event == "media":
                 if processing:
                     continue  # ignore audio while we're responding
-
+                if (time.monotonic() - greeting_done_time) < 3.0:
+                    continue
                 payload = data.get("media", {}).get("payload", "")
                 if not payload:
                     continue
 
                 chunk = base64.b64decode(payload)
+                audio_buffer += chunk
 
-                if _is_silence(chunk):
-                    silence_chunks += 1
-                    # 20 × 20ms chunks = 400ms of silence after speech → end of utterance
-                    if speaking and silence_chunks >= 20 and len(audio_buffer) >= 16000:
-                        print(f"[Voicebot] Utterance complete — {len(audio_buffer)} bytes")
+                if len(audio_buffer) >= 64000 and not processing:
+                        print(f"[Voicebot] Processing {len(audio_buffer)} bytes")
                         buf = audio_buffer
                         audio_buffer = b""
-                        silence_chunks = 0
-                        speaking = False
                         processing = True
 
                         async def handle_speech(b=buf):
@@ -943,7 +942,10 @@ async def voicebot_stream(websocket: WebSocket):
                     end_call_session(call_sid, 0)
 
             elif event == "mark":
-                print(f"[Voicebot] Mark received: {data.get('mark', {}).get('name', '')}")
+                name = data.get('mark', {}).get('name', '')
+                print(f"[Voicebot] Mark received: {name}")
+                if name == "greeting_done":
+                    greeting_done_time = time.monotonic()
 
     except WebSocketDisconnect:
         print(f"[Voicebot] Disconnected | SID: {call_sid}")
@@ -999,6 +1001,28 @@ def _mp3_to_pcm(mp3_bytes: bytes) -> bytes:
 def _encode_pcm(pcm_bytes: bytes) -> str:
     """Base64 encode PCM bytes for Exotel WebSocket."""
     return base64.b64encode(pcm_bytes).decode("utf-8")
+
+def _raw_to_wav(raw_bytes: bytes) -> bytes:
+    """Convert Exotel's compressed audio to WAV 16kHz mono for Sarvam STT."""
+    try:
+        from pydub import AudioSegment
+        import io
+        # Try to load as raw mulaw 8kHz (most common Exotel format)
+        audio = AudioSegment(
+            data=raw_bytes,
+            sample_width=1,      # mulaw = 1 byte per sample
+            frame_rate=8000,
+            channels=1
+        )
+        audio = audio.set_frame_rate(16000).set_channels(1).set_sample_width(2)
+        buf = io.BytesIO()
+        audio.export(buf, format="wav")
+        wav = buf.getvalue()
+        print(f"[STT] Converted to WAV: {len(wav)} bytes")
+        return wav
+    except Exception as e:
+        print(f"[STT] Conversion failed: {e}")
+        return b""
 
 # ── DASHBOARD HTML ─────────────────────────────────────────────────────────────
 
