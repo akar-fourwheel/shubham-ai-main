@@ -794,12 +794,17 @@ async def voicebot_stream(websocket: WebSocket):
     print("[Voicebot] WebSocket connected")
 
     async def process_buffer():
-        nonlocal audio_buffer, processing
+        nonlocal audio_buffer, processing, last_audio_time
         while True:
             await asyncio.sleep(1.5)  # check every 1.5s
-            if not audio_buffer or not call_sid or processing:
+            if not call_sid or processing:
+                continue
+            if not audio_buffer:
                 continue
             # If we have audio and nothing new came in last 1.5s — process it
+            if(asyncio.get_event_loop().time()-last_audio_time) < 1.5:
+                continue
+            
             buf = audio_buffer
             audio_buffer = b""
             if len(buf) < 3200:
@@ -896,6 +901,7 @@ async def voicebot_stream(websocket: WebSocket):
                 if payload:
                     chunk = base64.b64decode(payload)
                     audio_buffer += chunk
+                    last_audio_time = asyncio.get_event_loop().time()
                     print(f"[Voicebot] Audio buffer: {len(audio_buffer)} bytes")
 
             elif event == "stop":
