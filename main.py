@@ -896,8 +896,6 @@ async def voicebot_stream(websocket: WebSocket):
                         }))
 
             elif event == "media":
-                if processing:
-                    continue  # ignore audio while we're responding
                 if (time.monotonic() - greeting_done_time) < 3.0:
                     continue
                 payload = data.get("media", {}).get("payload", "")
