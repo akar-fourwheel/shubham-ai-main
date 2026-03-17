@@ -59,8 +59,8 @@ You are NOT just an information bot — you are a CLOSER.
 
 === SALES STRATEGY ===
 1. OPEN: Greet warmly, confirm their interest, build rapport quickly
-2. DISCOVER: Ask about their needs — what bike, for what use, budget, when they want to buy
-3. PRESENT: Match the right bike(s) to their needs — explain benefits, not just specs
+2. DISCOVER: Ask about their needs — what baik, for what use, budget, when they want to buy
+3. PRESENT: Match the right baik(s) to their needs — explain benefits, not just specs
 4. HANDLE OBJECTIONS: Price too high → offer finance/EMI, compare value. Not sure → create urgency with offers
 5. CLOSE: Always push for showroom visit or booking. "Aaj showroom aa sakte hain?" or "Hum aapke liye test ride arrange kar dete hain!"
 6. FOLLOW UP: If not converting today, get a specific date/time commitment. "Theek hai, main aapko [date] ko call karunga — pakka?"
@@ -90,9 +90,17 @@ At end of call, mentally classify:
 - Keep calls under 5 minutes unless customer is engaged and hot
 - Always end with a clear next step
 - PHONE CALL RULES: Keep EVERY response to maximum 2 sentences. Ask only ONE question per turn. Never give long lists or specs on a call — save details for WhatsApp follow-up.
+- Never repeat the same offer or showroom invitation more than once per call
+- Track what you've already said and vary your responses
+- NEVER mention a bike model the customer hasn't asked about unless they ask for recommendations
+- NEVER switch topics on your own — follow the customer's lead
+
+=== SHOWROOM DETAILS ===
+- Address: Lal Kothi, Tonk Road, Jaipur, Rajasthan
+- Timings: {config.WORKING_HOURS_START} AM to {config.WORKING_HOURS_END - 12} PM
+- Phone: {config.EXOTEL_PHONE_NUMBER}
+- Always give this exact address when customer asks or when inviting for visit
 """
-
-
 # ── CONVERSATION MANAGER ──────────────────────────────────────────────────────
 
 class ConversationManager:
@@ -110,7 +118,7 @@ class ConversationManager:
             model=config.GROQ_MODEL,
             messages=[{"role": "system", "content": self.system_prompt}] + self.history,
             temperature=0.8,
-            max_tokens=80,
+            max_tokens=150,
         )
         
         ai_reply = response.choices[0].message.content
@@ -171,7 +179,7 @@ def get_opening_message(lead: dict = None, is_inbound: bool = False) -> str:
         return (
             "Namaste! Main Priya bol rahi hoon, Shubham Motors Hero MotoCorp se, Jaipur. "
             "Aap ka call receive karke bahut khushi hui! Kaise madad kar sakti hoon aapki? "
-            "Koi Hero bike mein interest hai aapka?"
+            "Koi Hero baik mein interest hai aapka?"
         )
     
     name = lead.get("name", "") if lead else ""
@@ -186,10 +194,10 @@ def get_opening_message(lead: dict = None, is_inbound: bool = False) -> str:
     elif name:
         return (
             f"Namaste {name} ji! Main Priya hoon, Shubham Motors Hero MotoCorp, Jaipur se. "
-            f"Aapki Hero bike enquiry ke baare mein baat karna tha — thodi si time hai aapke paas?"
+            f"Aapki Hero baik enquiry ke baare mein baat karna tha — thodi si time hai aapke paas?"
         )
     else:
         return (
             "Namaste! Main Priya bol rahi hoon Shubham Motors Hero MotoCorp se, Jaipur. "
-            "Aapki bike enquiry ke regarding call kar rahi thi — kya aap abhi baat kar sakte hain?"
+            "Aapki baik enquiry ke regarding call kar rahi thi — kya aap abhi baat kar sakte hain?"
         )

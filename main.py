@@ -44,6 +44,7 @@ app = FastAPI(title="Shubham Motors AI Agent", version="2.1.0")
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 _greeting_pcm_cache = {}
+_filler_pcm_cache = {}
 
 # Thread pool for ALL blocking I/O (Sarvam TTS, Deepgram STT, Groq LLM)
 # This prevents blocking the FastAPI async event loop
@@ -78,6 +79,14 @@ async def startup():
             if pcm:
                 _greeting_pcm_cache["data"] = pcm
                 print(f"[Startup] ✅ Greeting PCM cached: {len(pcm)} bytes")
+                # Cache filler audio too
+                filler_text = "Ji, ek second..."
+                filler_audio = await _run(synthesize_speech, filler_text, "hinglish", timeout=10.0)
+                if filler_audio:
+                    filler_pcm = await _run(_mp3_to_pcm, filler_audio, timeout=5.0)
+                    if filler_pcm:
+                        _filler_pcm_cache["data"] = filler_pcm
+                        print(f"[Startup] ✅ Filler PCM cached: {len(filler_pcm)} bytes")
         else:
             print("[Startup] ⚠️ Greeting prewarm failed")
     
@@ -104,7 +113,6 @@ async def health():
 def _is_silence(pcm: bytes, threshold: int = 200) -> bool:
     samples = np.frombuffer(pcm, dtype=np.int16)
     rms = float(np.sqrt(np.mean(samples.astype(np.float32) ** 2)))
-    print(f"[VAD] RMS: {rms:.0f}")
     return rms < threshold
 
 def _hangup_xml() -> str:
@@ -127,30 +135,12 @@ def _record_xml(call_sid: str, play_url: str = None, say_text: str = None) -> st
     Uses Sarvam TTS audio via <Play>.
     """
 
-    # If text is provided but no audio URL, generate audio endpoint
-    # if not play_url and say_text:
-    #     play_url = f"{config.PUBLIC_URL}/call/audio/response/{call_sid}?text={_xml_safe(say_text[:800])}"
-
-    # content = ""
-    # if play_url:
-    #     content = f"<Play>{play_url}</Play>"
-
     content = ""
     if play_url:
         content = f"<Play>{play_url}</Play>"
     elif say_text:
         content = f'<Say language="hi-IN" voice="woman">{_xml_safe(say_text)}</Say>'
 
-#     return f"""<?xml version="1.0" encoding="UTF-8"?>
-# <Response>
-#   {content}
-#   <Record action="{config.PUBLIC_URL}/call/gather/{call_sid}"
-#           method="POST"
-#           maxLength="30"
-#           timeout="10"
-#           playBeep="false"
-#           finishOnKey="#" />
-# </Response>"""
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <Response>
 {content}
@@ -180,20 +170,6 @@ def _download_recording(url: str) -> bytes:
         print(f"[Audio] Download failed: {e}")
         return b""
 
-# def _download_recording(url: str) -> bytes:
-#     try:
-#         r = _requests.get(
-#             url,
-#             auth=(config.TWILIO_ACCOUNT_SID, config.TWILIO_AUTH_TOKEN),
-#             timeout=15
-#         )
-#         r.raise_for_status()
-#         print(f"[Audio] Downloaded {len(r.content)} bytes from Twilio recording")
-#         return r.content
-#     except Exception as e:
-#         print(f"[Audio] Download failed: {e}")
-#         return b""
-
 
 async def _run(fn, *args, timeout: float = 12.0):
     """
@@ -216,51 +192,6 @@ async def _run(fn, *args, timeout: float = 12.0):
 
 
 # ── EXOTEL WEBHOOKS ────────────────────────────────────────────────────────────
-# @app.api_route("/call/incoming", methods=["GET", "POST"])
-# async def incoming_call(request: Request, background_tasks: BackgroundTasks):
-#     if request.method == "GET":
-#         data = request.query_params
-#     else:
-#         data = await request.form()
-
-#     call_sid = data.get("CallSid", "").strip()
-#     caller   = data.get("From", "").strip()
-
-#     print(f"\n[Incoming] Call from {caller} | SID: {call_sid}")
-
-#     if not call_sid:
-#         return Response(
-#             content='<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
-#             media_type="application/xml"
-#         )
-
-#     start_call_session(call_sid, caller)
-
-#     # Generate warmup in background for next call
-#     warmup = UPLOAD_DIR / "opening_warmup.mp3"
-#     call_audio = UPLOAD_DIR / f"opening_{call_sid}.mp3"
-#     if not warmup.exists():
-#         async def _gen_warmup():
-#             audio = await _run(get_opening_audio, call_sid, timeout=10.0)
-#             if audio:
-#                 call_audio.write_bytes(audio)
-#                 warmup.write_bytes(audio)
-#                 print(f"[Incoming] ✅ Warmup generated: {len(audio)} bytes")
-#         background_tasks.add_task(_gen_warmup)
-
-#     greeting = "Namaste! Main Priya bol rahi hoon, Shubham Motors Hero MotoCorp se, Jaipur. Aap ka call receive karke bahut khushi hui! Kaise madad kar sakti hoon aapki?"
-#     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
-# <Response>
-#   <Say>{_xml_safe(greeting)}</Say>
-#   <Record action="{config.PUBLIC_URL}/call/gather/{call_sid}"
-#           method="POST"
-#           maxLength="60"
-#           timeout="10"
-#           playBeep="false"
-#           finishOnKey="#" />
-# </Response>"""
-
-#     return Response(content=xml, media_type="application/xml")
 
 @app.api_route("/call/incoming", methods=["GET", "POST"])
 async def incoming_call(request: Request, background_tasks: BackgroundTasks):
@@ -513,26 +444,6 @@ async def call_status(request: Request, background_tasks: BackgroundTasks):
 
 # ── AUDIO FILE SERVING ─────────────────────────────────────────────────────────
 
-# @app.get("/call/audio/opening/{call_sid}")
-# async def serve_opening_audio(call_sid: str):
-
-#     path = UPLOAD_DIR / f"opening_{call_sid}.mp3"
-
-#     if not path.exists():
-#         print(f"[Audio] Generating greeting for {call_sid}")
-
-#         audio = await _run(get_opening_audio, call_sid, timeout=10.0)
-
-#         if not audio:
-#             return Response(status_code=404)
-
-#         path.write_bytes(audio)
-
-#     return Response(
-#         content=path.read_bytes(),
-#         media_type="audio/mpeg"
-#     )
-
 @app.get("/call/audio/opening/{call_sid}")
 async def serve_opening_audio(call_sid: str):
     print(f"[Audio] Opening requested for {call_sid}")
@@ -668,11 +579,6 @@ async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket:
         return
     try:
         wav_bytes = _pcm_to_wav(buf)
-        if wav_bytes:
-            # Save for inspection
-            with open("/tmp/debug_audio.wav", "wb") as f:
-                f.write(wav_bytes)
-            print(f"[Debug] Saved WAV: {len(wav_bytes)} bytes, header: {wav_bytes[:12]}")
         if not wav_bytes:
             print("[Voicebot] Audio conversion failed")
             return
@@ -715,135 +621,6 @@ async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket:
 
 # ── VOICEBOT WEBSOCKET ─────────────────────────────────────────────────────────
 
-# @app.websocket("/call/stream")
-# async def voicebot_stream(websocket: WebSocket):
-#     await websocket.accept()
-#     call_sid = None
-#     stream_sid = ""
-#     audio_buffer = b""
-    
-#     print("[Voicebot] WebSocket connected")
-    
-#     try:
-#         async for message in websocket.iter_text():
-#             data = json.loads(message)
-#             event = data.get("event", "")
-            
-#             # ── Call started ───────────────────────────────────────────
-#             if event == "connected":
-#                 print("[Voicebot] Stream connected")
-            
-#             elif event == "start":
-#                 call_sid = data.get("start", {}).get("callSid", "")
-#                 stream_sid = data.get("start", {}).get("streamSid", "")
-#                 caller = data.get("start", {}).get("from", "")
-#                 print(f"[Voicebot] Call started | SID: {call_sid} | From: {caller}")
-                
-#                 start_call_session(call_sid, caller)
-                
-#                 # Send opening greeting immediately
-#                 session = active_calls.get(call_sid)
-#                 if session:
-#                     greeting = get_opening_message(session.get("lead"), is_inbound=True)
-#                     session["conversation"].history.append({
-#                         "role": "assistant", "content": greeting
-#                     })
-                    
-#                     pcm = _greeting_pcm_cache.get("data")
-
-#                     # Generate TTS audio
-#                     if not pcm:
-#                          # Cache miss — generate on the fly (first call after deploy)
-#                         audio = await _run(synthesize_speech, greeting, "hinglish", timeout=10.0)
-#                         if audio:
-#                             pcm = await _run(_mp3_to_pcm, audio, timeout=5.0)
-        
-#                     if pcm:
-#                         b64 = base64.b64encode(pcm).decode("ascii")
-#                         await websocket.send_text(json.dumps({
-#                             "event": "media",
-#                             "stream_sid": stream_sid,
-#                             "media": {"payload": b64}
-#                         }))
-#                         print(f"[Voicebot] Sent greeting ({len(pcm)} bytes, cached={bool(_greeting_pcm_cache.get('data'))})")
-            
-#             # ── Incoming audio from customer ───────────────────────────
-#             elif event == "media":
-#                 payload = data.get("media", {}).get("payload", "")
-#                 if payload:
-#                     chunk = base64.b64decode(payload)
-#                     audio_buffer += chunk
-            
-#             # ── Customer stopped speaking ──────────────────────────────
-#             elif event == "stop":
-#                 print(f"[Voicebot] Stream stopped | SID: {call_sid}")
-#                 if call_sid:
-#                     asyncio.create_task(end_call_session(call_sid, 0))
-            
-#             # ── Process buffered audio when silence detected ───────────
-#             elif event == "mark":
-#                 if audio_buffer and call_sid and len(audio_buffer) > 3200:
-#                     pcm_bytes = audio_buffer
-#                     audio_buffer = b""
-                    
-#                     # Convert PCM to WAV for Sarvam STT
-#                     wav_bytes = _pcm_to_wav(pcm_bytes)
-                    
-#                     session = active_calls.get(call_sid)
-#                     if not session:
-#                         continue
-                    
-#                     # STT
-#                     stt_result = await _run(transcribe_audio, wav_bytes, "hi-IN", timeout=10.0)
-#                     customer_text = stt_result.get("text", "").strip() if stt_result else ""
-                    
-#                     print(f"[Voicebot] STT: '{customer_text[:120]}'")
-                    
-#                     if not customer_text:
-#                         silence_count = session.get("silence_count", 0) + 1
-#                         session["silence_count"] = silence_count
-#                         if silence_count >= 3:
-#                             await websocket.send_text(json.dumps({"event": "stop"}))
-#                             continue
-#                         retry = "Ji? Kuch suna nahi — thoda louder bolein?"
-#                         audio = await _run(synthesize_speech, retry, "hinglish", timeout=8.0)
-#                     else:
-#                         session["silence_count"] = 0
-#                         detected_lang = stt_result.get("language", "hinglish")
-#                         session["language"] = detected_lang
-                        
-#                         # Groq LLM
-#                         conv = session["conversation"]
-#                         ai_reply = await _run(conv.chat, customer_text, timeout=15.0)
-#                         voice_text = re.sub(r"\{[\s\S]*?\}", "", ai_reply).strip() if ai_reply else ""
-                        
-#                         if not voice_text:
-#                             voice_text = "Ji, main samajh rahi hoon. Kya aap thoda aur detail de sakte hain?"
-                        
-#                         print(f"[Voicebot] Priya: {voice_text[:120]}")
-                        
-#                         # TTS
-#                         audio = await _run(synthesize_speech, voice_text, detected_lang, timeout=12.0)
-                    
-#                     if audio:
-#                         pcm = await _run(_mp3_to_pcm, audio, timeout=5.0)
-#                         if pcm:
-#                             b64 = _encode_pcm(pcm)
-#                             await websocket.send_text(json.dumps({
-#                                 "event": "media",
-#                                 "stream_sid": stream_sid,
-#                                 "media": {"payload": b64}
-#                             }))
-    
-#     except WebSocketDisconnect:
-#         print(f"[Voicebot] WebSocket disconnected | SID: {call_sid}")
-#         if call_sid:
-#             asyncio.create_task(end_call_session(call_sid, 0))
-#     except Exception as e:
-#         print(f"[Voicebot] Error: {e}")
-#         if call_sid:
-#             asyncio.create_task(end_call_session(call_sid, 0))
-
 @app.websocket("/call/stream")
 async def voicebot_stream(websocket: WebSocket):
     await websocket.accept()
@@ -865,7 +642,6 @@ async def voicebot_stream(websocket: WebSocket):
 
             elif event == "start":
                 start_data = data.get("start", {})
-                print(f"[Voicebot] Start event full data: {json.dumps(start_data)}")
                 call_sid = start_data.get("callSid") or start_data.get("call_sid") or ""
                 stream_sid = start_data.get("streamSid") or start_data.get("stream_sid") or ""
                 caller = start_data.get("from", "")
@@ -921,6 +697,16 @@ async def voicebot_stream(websocket: WebSocket):
 
                     async def handle_speech(b=buf):
                         try:
+                            # Send filler immediately before processing
+                            filler = _filler_pcm_cache.get("data")
+                            if filler:
+                                filler_b64 = base64.b64encode(filler).decode("ascii")
+                                await websocket.send_text(json.dumps({
+                                    "event": "media",
+                                    "stream_sid": stream_sid,
+                                    "media": {"payload": filler_b64}
+                                }))
+                                print("[Voicebot] Sent filler audio")
                             await _process_speech(b, call_sid, stream_sid, websocket, state)
                         finally:
                             _busy[0] = False
