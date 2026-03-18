@@ -69,23 +69,29 @@ def _save(filepath: Path, data: list):
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 def _rows_to_dicts(tab) -> list:
-    """Convert gspread rows to list of dicts using first row as headers."""
     try:
         records = tab.get_all_records()
-        return records
+        # Normalize all keys to lowercase
+        return [{k.lower(): v for k, v in r.items()} for r in records]
     except Exception as e:
         print(f"[Sheets] Read failed: {e}")
         return []
 
 def _find_row(tab, key_col: str, key_val: str) -> tuple:
-    """Find row index (1-based) and data for a matching key. Returns (row_idx, data)."""
     try:
         records = tab.get_all_records()
         headers = tab.row_values(1)
-        col_idx = headers.index(key_col) + 1
+        # Case-insensitive header match
+        headers_lower = [h.lower() for h in headers]
+        if key_col.lower() not in headers_lower:
+            print(f"[Sheets] Column '{key_col}' not found in headers: {headers}")
+            return None, None
+        col_idx = headers_lower.index(key_col.lower()) + 1
         for i, record in enumerate(records):
-            if str(record.get(key_col, "")) == str(key_val):
-                return i + 2, record  # +2 because row 1 is header
+            # Case-insensitive record key match
+            record_lower = {k.lower(): v for k, v in record.items()}
+            if str(record_lower.get(key_col.lower(), "")) == str(key_val):
+                return i + 2, record
         return None, None
     except Exception as e:
         print(f"[Sheets] Find row failed: {e}")
