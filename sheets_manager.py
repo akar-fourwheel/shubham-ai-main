@@ -127,7 +127,7 @@ def add_lead(lead: dict) -> str:
     if tab:
         try:
             headers = tab.row_values(1)
-            row = [str(new_lead.get(h, "")) for h in headers]
+            row = [str(new_lead.get(h.lower(), "")) for h in headers]
             tab.append_row(row)
             print(f"[Sheets] Lead {lead_id} added to Google Sheets")
         except Exception as e:
@@ -171,10 +171,11 @@ def update_lead(lead_id: str, updates: dict) -> bool:
         try:
             row_idx, existing = _find_row(tab, "lead_id", lead_id)
             if row_idx:
-                headers = tab.row_values(1)
+                headers = tab.row_values(1)  # ✅ fetch headers first
+                headers_lower = [h.lower() for h in headers]
                 for key, val in updates.items():
-                    if key in headers:
-                        col_idx = headers.index(key) + 1
+                    if key.lower() in headers_lower:
+                        col_idx = headers_lower.index(key.lower()) + 1  # ✅ key.lower()
                         tab.update_cell(row_idx, col_idx, str(val))
                 print(f"[Sheets] Lead {lead_id} updated")
                 return True
@@ -233,7 +234,7 @@ def log_call(data: dict):
     if tab:
         try:
             headers = tab.row_values(1)
-            row = [str(record.get(h, "")) for h in headers]
+            row = [str(record.get(h.lower(), "")) for h in headers]
             tab.append_row(row)
             print(f"[Sheets] Call {log_id} logged to Google Sheets")
             return log_id
@@ -284,7 +285,7 @@ def add_offer(offer: dict) -> str:
     if tab:
         try:
             headers = tab.row_values(1)
-            row = [str(record.get(h, "")) for h in headers]
+            row = [str(record.get(h.lower(), "")) for h in headers]
             tab.append_row(row)
             return oid
         except Exception as e:
