@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from groq import Groq
 import config
 from scraper import get_bike_catalog, format_catalog_for_ai
-from sheets_manager import get_active_offers
+from sheets_manager import get_active_offers, get_loss_reasons
 
 client = Groq(api_key=config.GROQ_API_KEY)
 
@@ -30,9 +30,25 @@ def build_system_prompt(lead: dict = None) -> str:
                 offer_text += f" — Applicable on: {o['models']}"
             offer_text += "\n"
 
+    # Inject loss reasons for AI learning
+    loss_data = get_loss_reasons()
+    feedback_text = ""
+    if loss_data["codealer_reasons"] or loss_data["competitor_reasons"]:
+        feedback_text = "\n=== COMPETITOR INTELLIGENCE (learn from past losses) ===\n"
+        if loss_data["codealer_reasons"]:
+            feedback_text += "Customers who went to other Hero dealers said:\n"
+            for r in loss_data["codealer_reasons"][-5:]:  # last 5
+                feedback_text += f"  - {r}\n"
+        if loss_data["competitor_reasons"]:
+            feedback_text += "Customers who bought other brands said:\n"
+            for r in loss_data["competitor_reasons"][-5:]:
+                feedback_text += f"  - {r}\n"
+        feedback_text += "Use this intelligence to proactively address these concerns.\n"
+    
     lead_context = ""
     if lead:
-        lead_context = f"""
+        call_count = int(lead.get("call_count", 0))
+        lead_context = f""" 
 === CURRENT CUSTOMER INFO ===
 Name: {lead.get('name', 'Unknown')}
 Interested in: {lead.get('interested_model', 'not specified')}
@@ -41,7 +57,17 @@ Previous notes: {lead.get('notes', 'none')}
 Previous calls: {lead.get('call_count', 0)}
 Temperature: {lead.get('temperature', 'warm')}
 """
-
+        if call_count >= 1:
+            lead_context += f"""
+=== FOLLOW-UP CALL INSTRUCTIONS ===
+This is a FOLLOW-UP call (call #{call_count + 1}).
+- Start by asking if they purchased a bike since last call
+- If YES purchased from us → congratulate, mark converted, ask for referral
+- If YES purchased from co-dealer → ask why they chose another Hero dealer, capture reason politely
+- If YES purchased from competitor brand → ask what made them choose that brand, capture reason politely  
+- If NO not yet → continue normal sales conversation, push for visit/booking
+- Be warm and non-pushy — they may have just been busy
+"""
     return f"""You are Priya, a friendly and highly professional sales representative for {config.BUSINESS_NAME}, 
 an authorized Hero MotoCorp dealership in {config.BUSINESS_CITY}, Rajasthan.
 
@@ -81,6 +107,7 @@ At end of call, mentally classify:
 
 {catalog_text}
 {offer_text}
+{feedback_text}
 {lead_context}
 
 === IMPORTANT RULES ===
@@ -156,7 +183,11 @@ Return ONLY valid JSON (no markdown, no explanation):
   "convert_to_sale": false,
   "assign_to_salesperson": false,
   "sentiment": "positive/neutral/negative",
-  "call_outcome": "interested/not_interested/callback_requested/converted/no_answer"
+  "call_outcome": "interested/not_interested/callback_requested/converted/no_answer",
+  "purchase_outcome": "converted/lost_to_codealer/lost_to_competitor/not_purchased/unknown",
+  "competitor_brand": "brand or dealer name if they bought elsewhere, empty if not applicable",
+  "loss_reason": "reason they didnt buy from us if lost, empty if not applicable",
+  "feedback_notes": "any useful feedback customer gave about our dealership or competitors"
 }}"""
         
         try:
@@ -185,7 +216,30 @@ def get_opening_message(lead: dict = None, is_inbound: bool = False) -> str:
     
     name = lead.get("name", "") if lead else ""
     model = lead.get("interested_model", "") if lead else ""
-    
+    call_count = int(lead.get("call_count", 0)) if lead else 0
+
+    # Follow-up call — ask about purchase first
+    if call_count >= 1:
+        if name and model:
+            return (
+                f"Namaste {name} ji! Main Priya bol rahi hoon Shubham Motors se. "
+                f"Aapne pehle {model} ke baare mein baat ki thi — "
+                f"kya aapne baik le li ya abhi bhi soch rahe hain?"
+            )
+        elif name:
+            return (
+                f"Namaste {name} ji! Main Priya hoon Shubham Motors se. "
+                f"Aapki Hero baik enquiry ke baare mein follow up kar rahi thi — "
+                f"kya aapne koi baik le li ya abhi bhi dekh rahe hain?"
+            )
+        else:
+            return (
+                "Namaste! Main Priya bol rahi hoon Shubham Motors Hero MotoCorp se. "
+                "Aapki pehli enquiry ke baare mein follow up kar rahi thi — "
+                "kya aapne koi baik le li ya abhi bhi consider kar rahe hain?"
+            )
+
+    # First call
     if name and model:
         return (
             f"Namaste {name} ji! Main Priya bol rahi hoon Shubham Motors se — "

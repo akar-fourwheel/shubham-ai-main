@@ -9,7 +9,7 @@ import sheets_manager as db
 from exotel_client import notify_salesperson
 
 # Round-robin assignment tracker
-_assignment_counter = itertools.cycle(range(len(config.SALES_TEAM)))
+_assignment_counter = itertools.cycle(range(max(len(config.SALES_TEAM), 1)))
 
 
 def process_call_result(lead_id: str, analysis: dict, transcript: str, duration_sec: int, direction: str = "outbound"):
@@ -40,10 +40,24 @@ def process_call_result(lead_id: str, analysis: dict, transcript: str, duration_
         updates["budget"] = analysis["budget"]
     if analysis.get("notes"):
         updates["notes"] = analysis["notes"]
-    
+    if analysis.get("purchase_outcome"):
+        updates["purchase_outcome"] = analysis["purchase_outcome"]
+    if analysis.get("competitor_brand"):
+        updates["competitor_brand"] = analysis["competitor_brand"]
+    if analysis.get("loss_reason"):
+        updates["loss_reason"] = analysis["loss_reason"]
+    if analysis.get("feedback_notes"):
+        updates["feedback_notes"] = analysis["feedback_notes"]
+
     # ── Status transitions ────────────────────────────────────────────────────
     if temp == "dead" or outcome == "not_interested":
         updates["status"] = "dead"
+        updates["next_followup"] = ""
+    elif analysis.get("purchase_outcome") == "lost_to_codealer":
+        updates["status"] = "lost_to_codealer"
+        updates["next_followup"] = ""
+    elif analysis.get("purchase_outcome") == "lost_to_competitor":
+        updates["status"] = "lost_to_competitor"
         updates["next_followup"] = ""
     elif analysis.get("convert_to_sale") or outcome == "converted":
         updates["status"] = "converted"
@@ -145,6 +159,7 @@ def get_dashboard_stats() -> dict:
         "total": len(all_leads),
         "new": 0, "hot": 0, "warm": 0, "cold": 0,
         "converted": 0, "dead": 0, "active": 0,
+        "lost_to_codealer": 0, "lost_to_competitor": 0,
     }
     for l in all_leads:
         s = l.get("status", "new")

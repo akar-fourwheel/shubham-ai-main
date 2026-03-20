@@ -71,7 +71,6 @@ def _save(filepath: Path, data: list):
 def _rows_to_dicts(tab) -> list:
     try:
         records = tab.get_all_records()
-        # Normalize all keys to lowercase
         return [{k.lower(): v for k, v in r.items()} for r in records]
     except Exception as e:
         print(f"[Sheets] Read failed: {e}")
@@ -81,14 +80,12 @@ def _find_row(tab, key_col: str, key_val: str) -> tuple:
     try:
         records = tab.get_all_records()
         headers = tab.row_values(1)
-        # Case-insensitive header match
         headers_lower = [h.lower() for h in headers]
         if key_col.lower() not in headers_lower:
             print(f"[Sheets] Column '{key_col}' not found in headers: {headers}")
             return None, None
         col_idx = headers_lower.index(key_col.lower()) + 1
         for i, record in enumerate(records):
-            # Case-insensitive record key match
             record_lower = {k.lower(): v for k, v in record.items()}
             if str(record_lower.get(key_col.lower(), "")) == str(key_val):
                 return i + 2, record
@@ -120,6 +117,10 @@ def add_lead(lead: dict) -> str:
         "created_at":       now,
         "converted_at":     "",
         "tags":             lead.get("tags", ""),
+        "purchase_outcome":   "",
+        "competitor_brand":   "",
+        "loss_reason":        "",
+        "feedback_notes":     "",
     }
 
     # Try Google Sheets first
@@ -171,11 +172,11 @@ def update_lead(lead_id: str, updates: dict) -> bool:
         try:
             row_idx, existing = _find_row(tab, "lead_id", lead_id)
             if row_idx:
-                headers = tab.row_values(1)  # ✅ fetch headers first
+                headers = tab.row_values(1)  
                 headers_lower = [h.lower() for h in headers]
                 for key, val in updates.items():
                     if key.lower() in headers_lower:
-                        col_idx = headers_lower.index(key.lower()) + 1  # ✅ key.lower()
+                        col_idx = headers_lower.index(key.lower()) + 1
                         tab.update_cell(row_idx, col_idx, str(val))
                 print(f"[Sheets] Lead {lead_id} updated")
                 return True
@@ -195,7 +196,7 @@ def get_leads_due_for_followup() -> list:
     now = datetime.now()
     due = []
     for r in get_all_leads():
-        if r.get("status") in ("dead", "converted"):
+        if r.get("status") in ("dead", "converted", "lost_to_codealer", "lost_to_competitor"):
             continue
         nf = r.get("next_followup", "")
         if not nf:
@@ -319,6 +320,33 @@ def get_faq() -> list:
         except Exception as e:
             print(f"[Sheets] get_faq failed: {e}")
     return []
+
+# ── FEEDBACK ─────────────────────────────────────────────────────────────────
+
+def get_loss_reasons() -> dict:
+    """Aggregate loss reasons from all lost leads for AI learning."""
+    all_leads = get_all_leads()
+    codealer_reasons = []
+    competitor_reasons = []
+    
+    for lead in all_leads:
+        outcome = lead.get("purchase_outcome", "")
+        reason = lead.get("loss_reason", "")
+        brand = lead.get("competitor_brand", "")
+        
+        if not reason:
+            continue
+            
+        if outcome == "lost_to_codealer":
+            codealer_reasons.append(reason)
+        elif outcome == "lost_to_competitor":
+            entry = f"{brand}: {reason}" if brand else reason
+            competitor_reasons.append(entry)
+    
+    return {
+        "codealer_reasons": codealer_reasons,
+        "competitor_reasons": competitor_reasons
+    }
 
 # ── SETTINGS ──────────────────────────────────────────────────────────────────
 
