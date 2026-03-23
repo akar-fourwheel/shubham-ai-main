@@ -14,6 +14,7 @@ import base64
 import os, json, re, io, asyncio, time
 from pathlib import Path
 from datetime import datetime
+from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -39,22 +40,9 @@ from scheduler import start_scheduler, stop_scheduler
 from voice import synthesize_speech, transcribe_audio
 from keep_alive import keep_alive
 
-# ── App setup ──────────────────────────────────────────────────────────────────
-app = FastAPI(title="Shubham Motors AI Agent", version="2.1.0")
-UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
-_greeting_pcm_cache = {}
-_filler_pcm_cache = {}
-
-# Thread pool for ALL blocking I/O (Sarvam TTS, Deepgram STT, Groq LLM)
-# This prevents blocking the FastAPI async event loop
-_executor = ThreadPoolExecutor(max_workers=12)
-
-
 # ── STARTUP / SHUTDOWN ─────────────────────────────────────────────────────────
-
-@app.on_event("startup")
-async def startup():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     keep_alive()
     print(f"\n{'='*60}")
     print(f"  SHUBHAM MOTORS AI AGENT — STARTING UP")
@@ -70,7 +58,7 @@ async def startup():
     start_scheduler()
 
     async def _prewarm():
-        await asyncio.sleep(3)  # let server fully start first
+        await asyncio.sleep(3)
         from agent import get_opening_message
         text = get_opening_message(None, is_inbound=True)
         audio = await _run(synthesize_speech, text, "hinglish", timeout=15.0)
@@ -79,18 +67,28 @@ async def startup():
             if pcm:
                 _greeting_pcm_cache["data"] = pcm
                 print(f"[Startup] ✅ Greeting PCM cached: {len(pcm)} bytes")
-                # Cache filler audio too
-                filler_text = "Ji, ek second..."
-                filler_audio = await _run(synthesize_speech, filler_text, "hinglish", timeout=10.0)
-                if filler_audio:
-                    filler_pcm = await _run(_mp3_to_pcm, filler_audio, timeout=5.0)
-                    if filler_pcm:
-                        _filler_pcm_cache["data"] = filler_pcm
-                        print(f"[Startup] ✅ Filler PCM cached: {len(filler_pcm)} bytes")
         else:
             print("[Startup] ⚠️ Greeting prewarm failed")
-    
+
     asyncio.create_task(_prewarm())
+
+    yield
+
+    print("\n[Shutdown] Stopping scheduler...")
+    stop_scheduler()
+    print("[Shutdown] Done")
+
+
+# ── App setup ──────────────────────────────────────────────────────────────────
+app = FastAPI(title="Shubham Motors AI Agent", version="2.1.0", lifespan=lifespan)
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
+_greeting_pcm_cache = {}
+
+# Thread pool for ALL blocking I/O (Sarvam TTS, Deepgram STT, Groq LLM)
+# This prevents blocking the FastAPI async event loop
+_executor = ThreadPoolExecutor(max_workers=12)
+
 
 # ── HEALTH ─────────────────────────────────────────────────────────────────────
 
@@ -700,16 +698,6 @@ async def voicebot_stream(websocket: WebSocket):
 
                     async def handle_speech(b=buf):
                         try:
-                            # Send filler immediately before processing
-                            filler = _filler_pcm_cache.get("data")
-                            if filler:
-                                filler_b64 = base64.b64encode(filler).decode("ascii")
-                                await websocket.send_text(json.dumps({
-                                    "event": "media",
-                                    "stream_sid": stream_sid,
-                                    "media": {"payload": filler_b64}
-                                }))
-                                print("[Voicebot] Sent filler audio")
                             await _process_speech(b, call_sid, stream_sid, websocket, state)
                         finally:
                             _busy[0] = False
