@@ -392,3 +392,120 @@ def set_setting(key: str, value: str):
             return
     settings.append({"key": key, "value": value})
     _save(SETTINGS_FILE, settings)
+
+# ── GET STATS FOR DASHBOARD ──────────────────────────────────────────────────────
+
+    def get_call_stats() -> dict:
+    """Aggregate call statistics from Calls tab for dashboard charts."""
+    calls = []
+    tab = _get_tab("Calls")
+    if tab:
+        try:
+            calls = _rows_to_dicts(tab)
+        except Exception as e:
+            print(f"[Sheets] get_call_stats failed: {e}")
+            calls = _load(CALLS_FILE)
+    else:
+        calls = _load(CALLS_FILE)
+
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    # Initialise accumulators
+    total_calls = len(calls)
+    calls_today = 0
+    total_duration = 0
+    sentiment = {"positive": 0, "neutral": 0, "negative": 0}
+    hourly = {str(h): 0 for h in range(24)}
+
+    for c in calls:
+        # Calls today
+        called_at = str(c.get("called_at", ""))
+        if called_at.startswith(today):
+            calls_today += 1
+
+        # Duration
+        try:
+            total_duration += int(c.get("duration_sec", 0))
+        except Exception:
+            pass
+
+        # Sentiment
+        s = str(c.get("sentiment", "neutral")).lower()
+        if s in sentiment:
+            sentiment[s] += 1
+        else:
+            sentiment["neutral"] += 1
+
+        # Hourly activity
+        try:
+            hour = called_at[11:13]  # extract HH from "YYYY-MM-DD HH:MM"
+            if hour in hourly:
+                hourly[hour] += 1
+        except Exception:
+            pass
+
+    avg_duration = round(total_duration / total_calls, 0) if total_calls > 0 else 0
+
+    # Per-salesperson summary
+    all_leads = get_all_leads()
+    salesperson_stats = {}
+    for lead in all_leads:
+        sp = lead.get("assigned_to", "")
+        if not sp:
+            continue
+        if sp not in salesperson_stats:
+            salesperson_stats[sp] = {
+                "name": sp,
+                "leads": 0,
+                "hot": 0,
+                "converted": 0,
+                "followups_due": 0,
+            }
+        salesperson_stats[sp]["leads"] += 1
+        if lead.get("temperature") == "hot":
+            salesperson_stats[sp]["hot"] += 1
+        if lead.get("status") == "converted":
+            salesperson_stats[sp]["converted"] += 1
+
+        # Check followup due
+        nf = lead.get("next_followup", "")
+        if nf:
+            try:
+                nf_dt = datetime.strptime(str(nf), "%Y-%m-%d %H:%M")
+                if nf_dt <= datetime.now():
+                    salesperson_stats[sp]["followups_due"] += 1
+            except Exception:
+                pass
+
+    # Model interest
+    model_interest = {}
+    for lead in all_leads:
+        model = lead.get("interested_model", "").strip()
+        if not model:
+            continue
+        model_interest[model] = model_interest.get(model, 0) + 1
+
+    # Loss reasons
+    loss_summary = {"lost_to_codealer": 0, "lost_to_competitor": 0}
+    competitor_brands = {}
+    for lead in all_leads:
+        outcome = lead.get("purchase_outcome", "")
+        if outcome == "lost_to_codealer":
+            loss_summary["lost_to_codealer"] += 1
+        elif outcome == "lost_to_competitor":
+            loss_summary["lost_to_competitor"] += 1
+            brand = lead.get("competitor_brand", "Unknown")
+            competitor_brands[brand] = competitor_brands.get(brand, 0) + 1
+
+    return {
+        "total_calls":        total_calls,
+        "calls_today":        calls_today,
+        "avg_duration_sec":   avg_duration,
+        "avg_duration_min":   round(avg_duration / 60, 1) if avg_duration else 0,
+        "sentiment":          sentiment,
+        "hourly_activity":    hourly,
+        "salesperson_stats":  list(salesperson_stats.values()),
+        "model_interest":     model_interest,
+        "loss_summary":       loss_summary,
+        "competitor_brands":  competitor_brands,
+    }

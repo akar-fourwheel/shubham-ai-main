@@ -557,7 +557,10 @@ async def upload_offer(
 
 @app.get("/api/stats")
 async def api_stats():
-    return JSONResponse(get_dashboard_stats())
+    from sheets_manager import get_call_stats
+    stats = get_dashboard_stats()
+    call_stats = get_call_stats()
+    return JSONResponse({**stats, **call_stats})
 
 
 @app.get("/api/active-calls")
