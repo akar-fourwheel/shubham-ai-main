@@ -72,7 +72,7 @@ def make_outbound_call(to_number: str, lead_id: str = "") -> dict:
     if not config.EXOTEL_API_KEY or not config.EXOTEL_API_TOKEN:
         log.error("Cannot make call -- Exotel credentials not configured")
         return {"success": False, "error": "Exotel credentials not configured"}
-    url = f"https://{config.EXOTEL_SUBDOMAIN}/v1/Accounts/{config.EXOTEL_ACCOUNT_SID}/Calls/connect"
+    url = f"https://{config.EXOTEL_SUBDOMAIN}/v1/Accounts/{config.EXOTEL_ACCOUNT_SID}/Calls/connect.json"
     
     # Exotel passthru URL — our app handles the call logic via webhook
     call_handler_url = f"{config.PUBLIC_URL}/call/handler"
@@ -81,7 +81,7 @@ def make_outbound_call(to_number: str, lead_id: str = "") -> dict:
         "From": to_number,
         "To": config.EXOTEL_PHONE_NUMBER,
         "CallerId": config.EXOTEL_PHONE_NUMBER,
-        "Url": call_handler_url,
+        "Url": f"http://my.exotel.com/{config.EXOTEL_ACCOUNT_SID}/exoml/start_voice/{config.EXOTEL_APP_ID}",
         "Record": "true",
         "TimeLimit": 300,          # max 5 min call
         "TimeOut": 30,             # ring timeout
@@ -105,7 +105,7 @@ def make_outbound_call(to_number: str, lead_id: str = "") -> dict:
 
 def send_sms(to_number: str, message: str) -> dict:
     """Send SMS via Exotel with retry on transient errors."""
-    url = f"https://{config.EXOTEL_SUBDOMAIN}/v1/Accounts/{config.EXOTEL_ACCOUNT_SID}/Sms/send"
+    url = f"https://{config.EXOTEL_SUBDOMAIN}/v1/Accounts/{config.EXOTEL_ACCOUNT_SID}/Sms/send.json"
     
     payload = {
         "From": config.EXOTEL_PHONE_NUMBER,

@@ -15,7 +15,7 @@ EXOTEL_API_TOKEN    = os.getenv("EXOTEL_API_TOKEN", "").strip()
 EXOTEL_ACCOUNT_SID  = os.getenv("EXOTEL_ACCOUNT_SID", "shubhammotors1").strip()
 EXOTEL_PHONE_NUMBER = os.getenv("EXOTEL_PHONE_NUMBER", "+919513886363").strip()
 EXOTEL_SUBDOMAIN    = os.getenv("EXOTEL_SUBDOMAIN", "api.exotel.com").strip()
-
+EXOTEL_APP_ID       = os.getenv("EXOTEL_APP_ID", "1186396")
 # -- AI / ML APIs -------------------------------------------------------------
 GROQ_API_KEY        = os.getenv("GROQ_API_KEY", "").strip()
 GROQ_MODEL          = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
@@ -101,6 +101,6 @@ def validate_config() -> list:
         warnings.append("PUBLIC_URL is localhost -- Exotel webhooks require a public URL (use ngrok)")
     if not SALES_TEAM:
         warnings.append("No salesperson configured -- hot lead assignment disabled")
-    if not PRIMARY_AGENT_NUMBER and not AGENT_NUMBERS:
-        warnings.append("No human agent configured -- transfer to human will not work")
+    # if not PRIMARY_AGENT_NUMBER and not AGENT_NUMBERS:
+    #     warnings.append("No human agent configured -- transfer to human will not work")
     return warnings
