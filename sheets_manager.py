@@ -395,7 +395,7 @@ def set_setting(key: str, value: str):
 
 # ── GET STATS FOR DASHBOARD ──────────────────────────────────────────────────────
 
-    def get_call_stats() -> dict:
+def get_call_stats() -> dict:
     """Aggregate call statistics from Calls tab for dashboard charts."""
     calls = []
     tab = _get_tab("Calls")
