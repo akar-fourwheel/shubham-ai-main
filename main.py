@@ -785,8 +785,10 @@ def _encode_pcm(pcm_bytes: bytes) -> str:
 def _render_dashboard(stats: dict, leads: list) -> str:
     badge = {
         "hot": "🔥", "warm": "🟡", "cold": "❄️",
-        "dead": "☠️", "converted": "✅", "new": "🆕", "active": "📞"
+        "dead": "☠️", "converted": "✅", "new": "🆕", "active": "📞",
+        "lost_to_codealer": "⚠️", "lost_to_competitor": "❌"
     }
+
     rows = ""
     for l in leads:
         s = l.get("status", "new")
@@ -796,10 +798,12 @@ def _render_dashboard(stats: dict, leads: list) -> str:
           <td>{ic} {l.get('name') or '—'}</td>
           <td>{l.get('mobile','')}</td>
           <td>{l.get('interested_model') or '—'}</td>
+          <td>{l.get('budget') or '—'}</td>
           <td><span class="badge badge-{s}">{s.upper()}</span></td>
           <td>{l.get('assigned_to') or '—'}</td>
+          <td>{l.get('last_called') or '—'}</td>
           <td>{l.get('next_followup') or '—'}</td>
-          <td>{l.get('call_count',0)}</td>
+          <td>{l.get('call_count', 0)}</td>
           <td>
             <button onclick="callLead('{l.get('lead_id','')}','{l.get('mobile','')}')"
                     class="btn-call">📞 Call</button>
@@ -813,89 +817,339 @@ def _render_dashboard(stats: dict, leads: list) -> str:
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Shubham Motors — AI Agent</title>
 <style>
-*{{box-sizing:border-box;margin:0;padding:0}}
-body{{font-family:'Segoe UI',sans-serif;background:#0d0d1a;color:#e0e0e0;min-height:100vh}}
-.header{{background:linear-gradient(135deg,#1a0a2e,#0d1a3e);padding:18px 30px;border-bottom:2px solid #cc2200;display:flex;align-items:center;justify-content:space-between}}
-.header h1{{color:#fff;font-size:1.4em}}
-.header p{{color:#aaa;font-size:0.8em;margin-top:3px}}
-.live{{background:#1a4a1a;color:#4f4;padding:5px 12px;border-radius:20px;font-size:0.8em;font-weight:bold}}
-.stats{{display:flex;gap:12px;padding:18px 30px;flex-wrap:wrap}}
-.card{{background:#1a1a2e;border-radius:10px;padding:14px 20px;min-width:120px;border:1px solid #2a2a4a;text-align:center}}
-.card .num{{font-size:2em;font-weight:bold}}
-.card .lbl{{color:#888;font-size:0.75em;margin-top:3px}}
-.section{{padding:0 30px 30px}}
-.toolbar{{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}}
-.btn{{background:#cc2200;color:#fff;border:none;padding:9px 16px;border-radius:6px;cursor:pointer;font-size:0.85em;font-weight:600}}
-.btn:hover{{background:#aa1a00}}
-.btn-green{{background:#1a6a1a}}.btn-green:hover{{background:#145014}}
-.btn-purple{{background:#5a1a8a}}.btn-purple:hover{{background:#3a0a6a}}
-.btn-teal{{background:#1a5a5a}}.btn-teal:hover{{background:#0a4040}}
-.btn-call{{background:#1a3a7a;color:#fff;border:none;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:0.78em}}
-.btn-call:hover{{background:#0a2a5a}}
-table{{width:100%;border-collapse:collapse;background:#1a1a2e;border-radius:10px;overflow:hidden;font-size:0.88em}}
-th{{background:#252540;color:#999;padding:11px 10px;text-align:left;font-size:0.8em;text-transform:uppercase;letter-spacing:.5px}}
-td{{padding:10px;border-bottom:1px solid #252540}}
-tr:hover{{background:#202035}}
-.badge{{padding:3px 8px;border-radius:12px;font-size:0.75em;font-weight:bold}}
-.badge-hot{{background:#3a0a0a;color:#ff5555}}
-.badge-warm{{background:#3a2a0a;color:#ffaa00}}
-.badge-cold{{background:#0a1a3a;color:#5588ff}}
-.badge-dead{{background:#1a1a1a;color:#777}}
-.badge-converted{{background:#0a2a0a;color:#44cc44}}
-.badge-new{{background:#0a2a3a;color:#44aaff}}
-.badge-active{{background:#1a2a1a;color:#44dd44}}
-.modal{{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:1000;align-items:center;justify-content:center}}
-.modal.open{{display:flex}}
-.mbox{{background:#1a1a2e;border-radius:12px;padding:28px;width:460px;max-width:95vw;border:1px solid #3a3a5a}}
-.mbox h3{{margin-bottom:18px;color:#fff}}
-label{{color:#999;font-size:0.82em;display:block;margin-bottom:4px}}
-input,select,textarea{{width:100%;background:#252540;border:1px solid #3a3a5a;color:#fff;padding:9px 12px;border-radius:6px;margin-bottom:10px;font-size:0.88em}}
-.row{{display:flex;gap:8px}}
-.hint{{color:#666;font-size:0.78em;margin-bottom:12px}}
-#toastContainer{{position:fixed;bottom:20px;right:20px;z-index:9999}}
-.toast{{background:#1a3a1a;color:#4f4;border:1px solid #2a5a2a;padding:12px 20px;border-radius:8px;margin-top:8px;font-size:0.9em}}
-.toast.err{{background:#3a1a1a;color:#f55;border-color:#5a2a2a}}
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ font-family: 'Segoe UI', sans-serif; background: #f4f6f9; color: #1a1a2e; min-height: 100vh; }}
+
+  /* ── HEADER ── */
+  .header {{
+    background: #fff;
+    padding: 14px 30px;
+    border-bottom: 3px solid #cc2200;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }}
+  .header-left {{ display: flex; align-items: center; gap: 14px; }}
+  .header-logo {{
+    background: #cc2200;
+    color: #fff;
+    width: 42px; height: 42px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4em;
+  }}
+  .header-title {{ font-size: 1.2em; font-weight: 700; color: #1a1a2e; }}
+  .header-sub {{ font-size: 0.75em; color: #888; margin-top: 2px; }}
+  .header-right {{ display: flex; align-items: center; gap: 10px; }}
+  .live-badge {{
+    background: #e8f5e9; color: #2e7d32;
+    padding: 5px 12px; border-radius: 20px;
+    font-size: 0.78em; font-weight: 600;
+    border: 1px solid #a5d6a7;
+  }}
+  .btn-refresh {{
+    background: #f4f6f9; border: 1px solid #ddd;
+    padding: 7px 14px; border-radius: 6px;
+    cursor: pointer; font-size: 0.82em; color: #555;
+  }}
+  .btn-refresh:hover {{ background: #e8eaf0; }}
+
+  /* ── STAT CARDS ── */
+  .stats-row {{
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 14px;
+    padding: 20px 30px;
+  }}
+  .stat-card {{
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px 18px;
+    border: 1px solid #e8eaf0;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    position: relative;
+    overflow: hidden;
+  }}
+  .stat-card::before {{
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--accent, #cc2200);
+  }}
+  .stat-icon {{
+    font-size: 1.6em;
+    margin-bottom: 8px;
+  }}
+  .stat-num {{
+    font-size: 2em;
+    font-weight: 700;
+    color: var(--accent, #1a1a2e);
+    line-height: 1;
+  }}
+  .stat-lbl {{
+    font-size: 0.72em;
+    color: #888;
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }}
+  .stat-sub {{
+    font-size: 0.7em;
+    color: #aaa;
+    margin-top: 2px;
+  }}
+
+  /* ── TOOLBAR ── */
+  .toolbar {{
+    display: flex;
+    gap: 8px;
+    padding: 0 30px 16px;
+    flex-wrap: wrap;
+  }}
+  .btn {{
+    background: #cc2200; color: #fff;
+    border: none; padding: 9px 16px;
+    border-radius: 6px; cursor: pointer;
+    font-size: 0.83em; font-weight: 600;
+  }}
+  .btn:hover {{ background: #aa1a00; }}
+  .btn-green {{ background: #2e7d32; }}
+  .btn-green:hover {{ background: #1b5e20; }}
+  .btn-purple {{ background: #6a1b9a; }}
+  .btn-purple:hover {{ background: #4a148c; }}
+  .btn-teal {{ background: #00695c; }}
+  .btn-teal:hover {{ background: #004d40; }}
+
+  /* ── SECTION CARD ── */
+  .section {{ padding: 0 30px 30px; }}
+  .section-card {{
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid #e8eaf0;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    overflow: hidden;
+    margin-bottom: 20px;
+  }}
+  .section-header {{
+    padding: 14px 20px;
+    border-bottom: 1px solid #f0f0f0;
+    font-weight: 600;
+    font-size: 0.9em;
+    color: #444;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }}
+
+  /* ── TABLE ── */
+  table {{ width: 100%; border-collapse: collapse; font-size: 0.85em; }}
+  th {{
+    background: #f8f9fb;
+    color: #666;
+    padding: 11px 14px;
+    text-align: left;
+    font-size: 0.78em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid #eee;
+  }}
+  td {{ padding: 11px 14px; border-bottom: 1px solid #f5f5f5; }}
+  tr:hover {{ background: #fafbfc; }}
+  .btn-call {{
+    background: #1565c0; color: #fff;
+    border: none; padding: 5px 11px;
+    border-radius: 4px; cursor: pointer;
+    font-size: 0.78em;
+  }}
+  .btn-call:hover {{ background: #0d47a1; }}
+
+  /* ── BADGES ── */
+  .badge {{
+    padding: 3px 9px; border-radius: 20px;
+    font-size: 0.72em; font-weight: 600;
+  }}
+  .badge-hot {{ background: #fdecea; color: #c62828; }}
+  .badge-warm {{ background: #fff8e1; color: #f57f17; }}
+  .badge-cold {{ background: #e3f2fd; color: #1565c0; }}
+  .badge-dead {{ background: #f5f5f5; color: #9e9e9e; }}
+  .badge-converted {{ background: #e8f5e9; color: #2e7d32; }}
+  .badge-new {{ background: #e8eaf6; color: #3949ab; }}
+  .badge-active {{ background: #e0f7fa; color: #00695c; }}
+  .badge-lost_to_codealer {{ background: #fff3e0; color: #e65100; }}
+  .badge-lost_to_competitor {{ background: #fce4ec; color: #880e4f; }}
+
+  /* ── MODALS ── */
+  .modal {{
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5); z-index: 1000;
+    align-items: center; justify-content: center;
+  }}
+  .modal.open {{ display: flex; }}
+  .mbox {{
+    background: #fff; border-radius: 12px;
+    padding: 28px; width: 460px; max-width: 95vw;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+  }}
+  .mbox h3 {{ margin-bottom: 18px; color: #1a1a2e; }}
+  label {{ color: #666; font-size: 0.82em; display: block; margin-bottom: 4px; }}
+  input, select, textarea {{
+    width: 100%; background: #f8f9fb;
+    border: 1px solid #e0e0e0; color: #1a1a2e;
+    padding: 9px 12px; border-radius: 6px;
+    margin-bottom: 10px; font-size: 0.88em;
+  }}
+  input:focus, select:focus, textarea:focus {{
+    outline: none; border-color: #cc2200;
+  }}
+  .row {{ display: flex; gap: 8px; }}
+  .hint {{ color: #aaa; font-size: 0.78em; margin-bottom: 12px; }}
+
+  /* ── TOAST ── */
+  #toastContainer {{ position: fixed; bottom: 20px; right: 20px; z-index: 9999; }}
+  .toast {{
+    background: #2e7d32; color: #fff;
+    padding: 12px 20px; border-radius: 8px;
+    margin-top: 8px; font-size: 0.88em;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  }}
+  .toast.err {{ background: #c62828; }}
+
+  /* ── TABLE FILTERS ── */
+  .table-filters {{
+    display: flex; gap: 10px;
+    padding: 14px 20px;
+    border-bottom: 1px solid #f0f0f0;
+    flex-wrap: wrap;
+    align-items: center;
+  }}
+  .table-filters input, .table-filters select {{
+    margin-bottom: 0;
+    width: auto;
+    min-width: 160px;
+    font-size: 0.82em;
+  }}
+  .filter-label {{
+    font-size: 0.78em;
+    color: #888;
+    font-weight: 600;
+  }}
 </style>
 </head>
 <body>
+
+<!-- ── HEADER ── -->
 <div class="header">
-  <div>
-    <h1>🏍️ Shubham Motors — AI Voice Agent</h1>
-    <p>Hero MotoCorp Authorized Dealer • Lal Kothi, Jaipur</p>
+  <div class="header-left">
+    <div class="header-logo">🏍️</div>
+    <div>
+      <div class="header-title">Shubham Motors AI Agent</div>
+      <div class="header-sub">Hero MotoCorp Authorized Dealer • Lal Kothi, Jaipur</div>
+    </div>
   </div>
-  <div class="live">🟢 LIVE</div>
+  <div class="header-right">
+    <span id="activeCalls" class="live-badge">🟢 Loading...</span>
+    <button class="btn-refresh" onclick="location.reload()">🔄 Refresh</button>
+  </div>
 </div>
 
-<div class="stats">
-  <div class="card"><div class="num">{stats.get('total',0)}</div><div class="lbl">Total Leads</div></div>
-  <div class="card"><div class="num" style="color:#ff5555">{stats.get('hot',0)}</div><div class="lbl">🔥 Hot</div></div>
-  <div class="card"><div class="num" style="color:#ffaa00">{stats.get('warm',0)}</div><div class="lbl">🟡 Warm</div></div>
-  <div class="card"><div class="num" style="color:#5588ff">{stats.get('cold',0)}</div><div class="lbl">❄️ Cold</div></div>
-  <div class="card"><div class="num" style="color:#44cc44">{stats.get('converted',0)}</div><div class="lbl">✅ Converted</div></div>
-  <div class="card"><div class="num" style="color:#777">{stats.get('dead',0)}</div><div class="lbl">☠️ Dead</div></div>
-  <div class="card"><div class="num" style="color:#44aaff">{stats.get('new',0)}</div><div class="lbl">🆕 New</div></div>
+<!-- ── STAT CARDS ── -->
+<div class="stats-row">
+  <div class="stat-card" style="--accent:#cc2200">
+    <div class="stat-icon">👥</div>
+    <div class="stat-num" style="color:#cc2200">{stats.get('total',0)}</div>
+    <div class="stat-lbl">Total Leads</div>
+    <div class="stat-sub">{stats.get('new',0)} new today</div>
+  </div>
+  <div class="stat-card" style="--accent:#c62828">
+    <div class="stat-icon">🔥</div>
+    <div class="stat-num" style="color:#c62828">{stats.get('hot',0)}</div>
+    <div class="stat-lbl">Hot Leads</div>
+    <div class="stat-sub">Ready to buy</div>
+  </div>
+  <div class="stat-card" style="--accent:#2e7d32">
+    <div class="stat-icon">✅</div>
+    <div class="stat-num" style="color:#2e7d32">{stats.get('converted',0)}</div>
+    <div class="stat-lbl">Converted</div>
+    <div class="stat-sub">Bikes sold</div>
+  </div>
+  <div class="stat-card" style="--accent:#1565c0">
+    <div class="stat-icon">📞</div>
+    <div class="stat-num" style="color:#1565c0">{stats.get('calls_today',0)}</div>
+    <div class="stat-lbl">Calls Today</div>
+    <div class="stat-sub">{stats.get('total_calls',0)} total</div>
+  </div>
+  <div class="stat-card" style="--accent:#6a1b9a">
+    <div class="stat-icon">⏱️</div>
+    <div class="stat-num" style="color:#6a1b9a">{stats.get('avg_duration_min',0)}</div>
+    <div class="stat-lbl">Avg Duration</div>
+    <div class="stat-sub">minutes per call</div>
+  </div>
+  <div class="stat-card" style="--accent:#00695c">
+    <div class="stat-icon">❄️</div>
+    <div class="stat-num" style="color:#00695c">{stats.get('active',0)}</div>
+    <div class="stat-lbl">Active Leads</div>
+    <div class="stat-sub">{stats.get('warm',0)} warm • {stats.get('cold',0)} cold</div>
+  </div>
 </div>
 
+<!-- ── TOOLBAR ── -->
+<div class="toolbar">
+  <button class="btn" onclick="open_modal('addModal')">➕ Add Lead</button>
+  <button class="btn btn-green" onclick="open_modal('importModal')">📥 Import Excel</button>
+  <button class="btn btn-purple" onclick="open_modal('offerModal')">🎁 Upload Offer</button>
+</div>
+
+<!-- ── LEADS TABLE ── -->
 <div class="section">
-  <div class="toolbar">
-    <button class="btn" onclick="open_modal('addModal')">➕ Add Lead</button>
-    <button class="btn btn-green" onclick="open_modal('importModal')">📥 Import Excel</button>
-    <button class="btn btn-purple" onclick="open_modal('offerModal')">🎁 Upload Offer</button>
-    <button class="btn btn-teal" onclick="location.reload()">🔄 Refresh</button>
+  <div class="section-card">
+    <div class="section-header">📋 All Leads</div>
+    <div class="table-filters">
+      <span class="filter-label">Filter:</span>
+      <input type="text" id="searchInput" placeholder="🔍 Search name or mobile..." oninput="filterTable()">
+      <select id="statusFilter" onchange="filterTable()">
+        <option value="">All Status</option>
+        <option value="new">New</option>
+        <option value="active">Active</option>
+        <option value="hot">Hot</option>
+        <option value="warm">Warm</option>
+        <option value="cold">Cold</option>
+        <option value="converted">Converted</option>
+        <option value="dead">Dead</option>
+        <option value="lost_to_codealer">Lost to Co-dealer</option>
+        <option value="lost_to_competitor">Lost to Competitor</option>
+      </select>
+      <select id="spFilter" onchange="filterTable()">
+        <option value="">All Salespersons</option>
+        <option>Naveen</option>
+        <option>Shelindra</option>
+      </select>
+    </div>
+    <table id="leadsTable">
+      <thead>
+        <tr>
+          <th>Customer</th>
+          <th>Mobile</th>
+          <th>Interested In</th>
+          <th>Budget</th>
+          <th>Status</th>
+          <th>Assigned To</th>
+          <th>Last Called</th>
+          <th>Next Follow-up</th>
+          <th>Calls</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody id="leadsBody">{rows}</tbody>
+    </table>
   </div>
-  <table>
-    <thead>
-      <tr>
-        <th>Customer</th><th>Mobile</th><th>Interested In</th>
-        <th>Status</th><th>Assigned To</th><th>Next Follow-up</th>
-        <th>Calls</th><th>Action</th>
-      </tr>
-    </thead>
-    <tbody>{rows}</tbody>
-  </table>
 </div>
 
-<!-- Add Lead -->
+<!-- ── MODALS ── -->
 <div class="modal" id="addModal">
   <div class="mbox">
     <h3>➕ Add New Lead</h3>
@@ -915,32 +1169,28 @@ input,select,textarea{{width:100%;background:#252540;border:1px solid #3a3a5a;co
     </select>
     <label>Budget (₹)</label>
     <input id="f_budget" placeholder="80000">
-    <label>Area / Source</label>
-    <input id="f_area" placeholder="Malviya Nagar / Facebook Ad">
     <label>Notes</label>
     <textarea id="f_notes" rows="2" placeholder="Any special requirement..."></textarea>
     <div class="row">
       <button class="btn" onclick="addLead()">💾 Save Lead</button>
-      <button class="btn" style="background:#333" onclick="close_modal('addModal')">Cancel</button>
+      <button class="btn" style="background:#999" onclick="close_modal('addModal')">Cancel</button>
     </div>
   </div>
 </div>
 
-<!-- Import -->
 <div class="modal" id="importModal">
   <div class="mbox">
     <h3>📥 Import Leads from Excel / CSV</h3>
-    <p class="hint">Columns needed: name, mobile, interested_model, budget, area, source</p>
+    <p class="hint">Columns needed: name, mobile, interested_model, budget, source</p>
     <input type="file" id="importFile" accept=".xlsx,.xls,.csv">
     <div class="row" style="margin-top:8px">
       <button class="btn btn-green" onclick="importLeads()">Import</button>
-      <button class="btn" style="background:#333" onclick="close_modal('importModal')">Cancel</button>
+      <button class="btn" style="background:#999" onclick="close_modal('importModal')">Cancel</button>
     </div>
-    <div id="importResult" style="margin-top:10px;color:#4f4;font-size:0.85em"></div>
+    <div id="importResult" style="margin-top:10px;color:#2e7d32;font-size:0.85em"></div>
   </div>
 </div>
 
-<!-- Offer Upload -->
 <div class="modal" id="offerModal">
   <div class="mbox">
     <h3>🎁 Upload Offer / Scheme</h3>
@@ -954,17 +1204,55 @@ input,select,textarea{{width:100%;background:#252540;border:1px solid #3a3a5a;co
     <input type="file" id="offerFile" accept=".pdf,.xlsx,.xls,.png,.jpg,.jpeg">
     <div class="row" style="margin-top:8px">
       <button class="btn btn-purple" onclick="uploadOffer()">Upload</button>
-      <button class="btn" style="background:#333" onclick="close_modal('offerModal')">Cancel</button>
+      <button class="btn" style="background:#999" onclick="close_modal('offerModal')">Cancel</button>
     </div>
-    <div id="offerResult" style="margin-top:10px;color:#4f4;font-size:0.85em"></div>
+    <div id="offerResult" style="margin-top:10px;color:#2e7d32;font-size:0.85em"></div>
   </div>
 </div>
 
 <div id="toastContainer"></div>
 
 <script>
-function open_modal(id)  {{ document.getElementById(id).classList.add('open') }}
-function close_modal(id) {{ document.getElementById(id).classList.remove('open') }}
+// ── ACTIVE CALLS ──
+async function updateActiveCalls() {{
+  try {{
+    const r = await fetch('/api/active-calls');
+    const d = await r.json();
+    const el = document.getElementById('activeCalls');
+    if (d.active_calls > 0) {{
+      el.textContent = `🟢 ${{d.active_calls}} Active Call${{d.active_calls > 1 ? 's' : ''}}`;
+      el.style.background = '#e8f5e9';
+    }} else {{
+      el.textContent = '⚪ No Active Calls';
+      el.style.background = '#f5f5f5';
+      el.style.color = '#888';
+    }}
+  }} catch(e) {{}}
+}}
+updateActiveCalls();
+setInterval(updateActiveCalls, 10000);
+
+// ── TABLE FILTER ──
+function filterTable() {{
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const status = document.getElementById('statusFilter').value.toLowerCase();
+  const sp = document.getElementById('spFilter').value.toLowerCase();
+  const rows = document.querySelectorAll('#leadsBody tr');
+  rows.forEach(row => {{
+    const text = row.textContent.toLowerCase();
+    const matchSearch = !search || text.includes(search);
+    const matchStatus = !status || text.includes(status);
+    const matchSp = !sp || text.includes(sp);
+    row.style.display = (matchSearch && matchStatus && matchSp) ? '' : 'none';
+  }});
+}}
+
+// ── MODALS ──
+function open_modal(id) {{ document.getElementById(id).classList.add('open'); }}
+function close_modal(id) {{ document.getElementById(id).classList.remove('open'); }}
+document.querySelectorAll('.modal').forEach(m =>
+  m.addEventListener('click', e => {{ if (e.target === m) m.classList.remove('open'); }})
+);
 
 function toast(msg, err=false) {{
   const t = document.createElement('div');
@@ -974,10 +1262,7 @@ function toast(msg, err=false) {{
   setTimeout(() => t.remove(), 4000);
 }}
 
-document.querySelectorAll('.modal').forEach(m =>
-  m.addEventListener('click', e => {{ if (e.target === m) m.classList.remove('open') }})
-);
-
+// ── ADD LEAD ──
 async function addLead() {{
   const mobile = document.getElementById('f_mobile').value.trim();
   if (!mobile) {{ toast('Mobile number is required!', true); return; }}
@@ -986,56 +1271,63 @@ async function addLead() {{
     mobile,
     interested_model: document.getElementById('f_model').value,
     budget: document.getElementById('f_budget').value,
-    area: document.getElementById('f_area').value,
     notes: document.getElementById('f_notes').value,
   }};
   const r = await fetch('/api/leads/add', {{
-    method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify(data)
+    method: 'POST',
+    headers: {{'Content-Type': 'application/json'}},
+    body: JSON.stringify(data)
   }});
   const res = await r.json();
-  if (res.success) {{ toast('Lead added! ID: ' + res.lead_id); close_modal('addModal'); setTimeout(()=>location.reload(),1500); }}
-  else {{ toast('Error adding lead', true); }}
+  if (res.success) {{
+    toast('Lead added! ID: ' + res.lead_id);
+    close_modal('addModal');
+    setTimeout(() => location.reload(), 1500);
+  }} else {{
+    toast('Error adding lead', true);
+  }}
 }}
 
+// ── IMPORT ──
 async function importLeads() {{
   const file = document.getElementById('importFile').files[0];
   if (!file) {{ toast('Please select a file', true); return; }}
-  const fd = new FormData(); fd.append('file', file);
-  const r = await fetch('/api/leads/import', {{method:'POST', body:fd}});
+  const fd = new FormData();
+  fd.append('file', file);
+  const r = await fetch('/api/leads/import', {{ method: 'POST', body: fd }});
   const res = await r.json();
   document.getElementById('importResult').textContent =
     `Imported: ${{res.imported}} leads | Skipped: ${{res.skipped}} duplicates`;
 }}
 
+// ── CALL LEAD ──
 async function callLead(leadId, mobile) {{
   if (!confirm(`Call ${{mobile}} now?\\nPriya will call this number immediately.`)) return;
   const r = await fetch('/api/call/make', {{
-    method:'POST', headers:{{'Content-Type':'application/json'}},
-    body: JSON.stringify({{lead_id: leadId, mobile}})
+    method: 'POST',
+    headers: {{'Content-Type': 'application/json'}},
+    body: JSON.stringify({{ lead_id: leadId, mobile }})
   }});
   const res = await r.json();
   toast(res.message || 'Call initiated!');
 }}
 
+// ── UPLOAD OFFER ──
 async function uploadOffer() {{
   const title = document.getElementById('o_title').value.trim();
-  const file  = document.getElementById('offerFile').files[0];
+  const file = document.getElementById('offerFile').files[0];
   if (!title) {{ toast('Offer title is required!', true); return; }}
-  if (!file)  {{ toast('Please select a file', true); return; }}
+  if (!file) {{ toast('Please select a file', true); return; }}
   const fd = new FormData();
   fd.append('file', file);
   fd.append('title', title);
   fd.append('valid_till', document.getElementById('o_valid').value);
   fd.append('models', document.getElementById('o_models').value);
-  const r = await fetch('/api/offers/upload', {{method:'POST', body:fd}});
+  const r = await fetch('/api/offers/upload', {{ method: 'POST', body: fd }});
   const res = await r.json();
   document.getElementById('offerResult').textContent =
     res.success ? 'Offer uploaded! AI will use this in all calls.' : 'Upload failed';
 }}
-
-setInterval(async () => {{
-  try {{ await fetch('/api/stats'); }} catch(e) {{}}
-}}, 30000);
 </script>
 </body>
 </html>"""
