@@ -79,7 +79,6 @@ def make_outbound_call(to_number: str, lead_id: str = "") -> dict:
     
     payload = {
         "From": to_number,
-        "To": config.EXOTEL_PHONE_NUMBER,
         "CallerId": config.EXOTEL_PHONE_NUMBER,
         "Url": f"http://my.exotel.com/{config.EXOTEL_ACCOUNT_SID}/exoml/start_voice/{config.EXOTEL_APP_ID}",
         "Record": "true",
