@@ -243,7 +243,7 @@ async def outbound_call_handler(request: Request):
 
     # Avoid duplicate sessions (outbound can sometimes trigger twice)
     if call_sid not in active_calls:
-        start_call_session(call_sid, called, lead_id=lead_id)
+        start_call_session(call_sid, called, lead_id=lead_id, direction="outbound")
     else:
         print(f"[Outbound] Session already exists for {call_sid}, skipping duplicate init")
 
@@ -823,7 +823,7 @@ def _render_dashboard(stats: dict, leads: list) -> str:
   }}
   .header-left {{ display: flex; align-items: center; gap: 14px; }}
   .header-logo {{
-    background: #cc2200;
+    background: #ea9999;
     color: #fff;
     width: 42px; height: 42px;
     border-radius: 10px;

@@ -18,7 +18,7 @@ import sheets_manager as db
 active_calls: Dict[str, dict] = {}
 
 
-def start_call_session(call_sid: str, caller_number: str, lead_id: str = None) -> dict:
+def start_call_session(call_sid: str, caller_number: str, lead_id: str = None, direction: str = None) -> dict:
     """Initialize a new call session."""
     lead = None
 
@@ -29,16 +29,16 @@ def start_call_session(call_sid: str, caller_number: str, lead_id: str = None) -
 
     if lead is None and caller_number:
         # Auto-create lead for inbound unknown callers
+        source = direction or "inbound_call"
         new_id = db.add_lead({
             "mobile":  caller_number,
-            "source":  "inbound_call",
+            "source":  source,
             "notes":   "Auto-created from inbound call",
         })
         lead    = db.get_lead_by_id(new_id)
         lead_id = new_id
 
-    is_inbound = lead_id is None or (lead and lead.get("source") == "inbound_call")
-
+    is_inbound = direction != "outbound" if direction else (lead_id is None or (lead and lead.get("source") == "inbound_call"))
     session = {
         "call_sid":    call_sid,
         "lead_id":     lead_id or (lead.get("lead_id") if lead else ""),
