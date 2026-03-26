@@ -84,6 +84,7 @@ app = FastAPI(title="Shubham Motors AI Agent", version="2.1.0", lifespan=lifespa
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 _greeting_pcm_cache = {}
+_pending_outbound: set = set()
 
 # Thread pool for ALL blocking I/O (Sarvam TTS, Deepgram STT, Groq LLM)
 # This prevents blocking the FastAPI async event loop
@@ -529,6 +530,7 @@ async def trigger_call(request: Request, background_tasks: BackgroundTasks):
             mobile = lead.get("mobile", "")
     if not mobile:
         raise HTTPException(status_code=400, detail="Mobile number required")
+    _pending_outbound.add(mobile.lstrip("0"))
     background_tasks.add_task(make_outbound_call, mobile, lead_id)
     return JSONResponse({"success": True, "message": f"Calling {mobile}..."})
 
@@ -650,17 +652,23 @@ async def voicebot_stream(websocket: WebSocket):
                 print(f"[Voicebot] Call started | SID: {call_sid} | From: {caller} | To: {called}")
                 print(f"[Voicebot] Raw start_data: {start_data}")
 
-                # Detect direction
-                our_number = config.EXOTEL_PHONE_NUMBER.lstrip("0")
-                if our_number in caller:
+                called_stripped = called.lstrip("0")
+                caller_stripped = caller.lstrip("0")
+
+                if called_stripped in _pending_outbound:
                     direction = "outbound"
-                    mobile = called        
+                    mobile = called
+                    _pending_outbound.discard(called_stripped)
+                elif caller_stripped in _pending_outbound:
+                    direction = "outbound"
+                    mobile = caller
+                    _pending_outbound.discard(caller_stripped)
                 else:
                     direction = "inbound"
-                    mobile = caller        
+                    mobile = caller
 
                 print(f"[Voicebot] Direction: {direction} | Customer mobile: {mobile}")
-
+                
                 start_call_session(call_sid, caller, direction=direction)
                 session = active_calls.get(call_sid)
 

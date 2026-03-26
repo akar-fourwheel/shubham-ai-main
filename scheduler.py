@@ -12,6 +12,7 @@ import pytz
 import config
 import sheets_manager as db
 from exotel_client import make_outbound_call, check_connection
+from main import _pending_outbound
 from scraper import scrape_hero_website
 
 IST = pytz.timezone("Asia/Kolkata")
@@ -49,6 +50,7 @@ def check_and_call_followups():
             continue
         
         print(f"[Scheduler] Calling {lead.get('name','?')} ({mobile}) | Lead: {lead_id}")
+        _pending_outbound.add(mobile.lstrip("0"))
         result = make_outbound_call(mobile, lead_id)
         
         if result.get("success"):
@@ -73,6 +75,7 @@ def call_new_leads():
         mobile = lead.get("mobile", "")
         lead_id = lead.get("lead_id", "")
         if mobile:
+            _pending_outbound.add(mobile.lstrip("0"))
             make_outbound_call(mobile, lead_id)
             time.sleep(5)  # 5 sec between calls
 
