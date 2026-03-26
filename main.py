@@ -209,7 +209,7 @@ async def incoming_call(request: Request, background_tasks: BackgroundTasks):
             media_type="application/xml"
         )
 
-    start_call_session(call_sid, caller)
+    start_call_session(call_sid, caller, direction="inbound")
 
     greeting = "Namaste! Main Priya bol rahi hoon, Shubham Motors Hero MotoCorp se, Jaipur. Aap ka call receive karke bahut khushi hui! Kaise madad kar sakti hoon aapki?"
     xml = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -648,7 +648,7 @@ async def voicebot_stream(websocket: WebSocket):
                 caller = start_data.get("from", "")
                 print(f"[Voicebot] Call started | SID: {call_sid} | From: {caller}")
 
-                start_call_session(call_sid, caller)
+                start_call_session(call_sid, caller, direction="inbound")
                 session = active_calls.get(call_sid)
 
                 if session:

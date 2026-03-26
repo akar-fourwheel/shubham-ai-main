@@ -46,7 +46,7 @@ def start_call_session(call_sid: str, caller_number: str, lead_id: str = None, d
         "lead":        lead,
         "conversation": ConversationManager(lead),
         "start_time":  time.time(),
-        "language":    "hinglish",   # FIX: was "hi-IN", use friendly label
+        "language":    "hinglish",
         "is_inbound":  is_inbound,
         "turn_count":  0,
         "silence_count": 0,
@@ -76,12 +76,10 @@ def get_opening_audio(call_sid: str) -> bytes:
     opening_text = get_opening_message(lead, is_inbound=is_inbound)
     print(f"[CallHandler] Opening text: {opening_text[:120]}")
 
-    # Log the opening in the conversation history
     session["conversation"].history.append({
         "role": "assistant", "content": opening_text
     })
 
-    # FIX: pass "hinglish" (friendly label) — voice.py maps it to "hi-IN"
     audio = synthesize_speech(opening_text, "hinglish")
 
     if not audio:
