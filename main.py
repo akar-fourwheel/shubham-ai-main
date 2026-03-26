@@ -84,7 +84,7 @@ app = FastAPI(title="Shubham Motors AI Agent", version="2.1.0", lifespan=lifespa
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 _greeting_pcm_cache = {}
-_pending_outbound: set = set()
+from state import _pending_outbound
 
 # Thread pool for ALL blocking I/O (Sarvam TTS, Deepgram STT, Groq LLM)
 # This prevents blocking the FastAPI async event loop
@@ -668,7 +668,7 @@ async def voicebot_stream(websocket: WebSocket):
                     mobile = caller
 
                 print(f"[Voicebot] Direction: {direction} | Customer mobile: {mobile}")
-                
+
                 start_call_session(call_sid, caller, direction=direction)
                 session = active_calls.get(call_sid)
 

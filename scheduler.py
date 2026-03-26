@@ -12,7 +12,7 @@ import pytz
 import config
 import sheets_manager as db
 from exotel_client import make_outbound_call, check_connection
-from main import _pending_outbound
+from state import _pending_outbound
 from scraper import scrape_hero_website
 
 IST = pytz.timezone("Asia/Kolkata")
