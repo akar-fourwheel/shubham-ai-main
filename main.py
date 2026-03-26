@@ -648,6 +648,21 @@ async def voicebot_stream(websocket: WebSocket):
                 caller = start_data.get("from", "")
                 print(f"[Voicebot] Call started | SID: {call_sid} | From: {caller}")
 
+                print(f"[Voicebot] Raw start_data: {start_data}")
+
+                    # Detect direction
+                raw_dir = start_data.get("direction", "").lower()
+                if "outbound" in raw_dir:
+                    direction = "outbound"
+                elif "inbound" in raw_dir:
+                    direction = "inbound"
+                else:
+                    # Fallback: if "from" is our Exotel number, it's outbound
+                    our_number = config.EXOTEL_PHONE_NUMBER.lstrip("0")
+                    direction = "outbound" if our_number in caller else "inbound"
+
+                print(f"[Voicebot] Direction detected: {direction}")
+
                 start_call_session(call_sid, caller, direction="inbound")
                 session = active_calls.get(call_sid)
 
