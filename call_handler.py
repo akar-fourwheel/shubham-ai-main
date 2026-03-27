@@ -157,4 +157,14 @@ def end_call_session(call_sid: str, duration_sec: int = 0) -> dict:
         direction="inbound" if session.get("is_inbound") else "outbound",
     )
 
+    # Save transcript to lead for next call memory
+    if lead_id:
+        lead = db.get_lead_by_id(lead_id)
+        old_transcript = lead.get("last_transcript", "") if lead else ""
+        call_num = int(lead.get("call_count", 0)) if lead else 1
+        timestamp = datetime.now().strftime("%d %b %H:%M")
+        new_entry = f"[Call {call_num} - {timestamp}]\n{transcript}"
+        combined = f"{old_transcript}\n\n{new_entry}".strip() if old_transcript else new_entry
+        db.update_lead(lead_id, {"last_transcript": combined[-3000:]})
+
     return analysis
