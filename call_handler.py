@@ -9,6 +9,7 @@ FIX: get_opening_audio() was passing "hi-IN" (IETF tag) to synthesize_speech()
      but we also set the default correctly here.
 """
 import time, re
+from datetime import datetime
 from typing import Dict
 from agent import ConversationManager, get_opening_message
 from voice import transcribe_audio, synthesize_speech
