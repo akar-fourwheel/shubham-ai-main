@@ -154,9 +154,15 @@ def get_all_leads() -> list:
     return _load(LEADS_FILE)
 
 def get_lead_by_mobile(mobile: str) -> dict | None:
-    clean = mobile.replace("+91", "").replace(" ", "").strip()
+    def normalize(num):
+        n = str(num).replace("+91", "").replace(" ", "").strip()
+        if n.startswith("0"):
+            n = n[1:]
+        return n
+
+    clean = normalize(mobile)
     for r in get_all_leads():
-        if str(r.get("mobile", "")).replace("+91", "").replace(" ", "").strip() == clean:
+        if normalize(r.get("mobile", "")) == clean:
             return r
     return None
 
