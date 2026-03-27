@@ -32,22 +32,35 @@ def process_call_result(lead_id: str, analysis: dict, transcript: str, duration_
     updates["last_called"]  = datetime.now().strftime("%Y-%m-%d %H:%M")
     updates["call_count"]   = int(lead.get("call_count", 0)) + 1 if lead else 1
     
+    # Only fill name if empty
     if analysis.get("customer_name") and lead and not lead.get("name"):
         updates["name"] = analysis["customer_name"]
+
+    # Always overwrite with latest
     if analysis.get("interested_model"):
         updates["interested_model"] = analysis["interested_model"]
     if analysis.get("budget"):
         updates["budget"] = analysis["budget"]
-    if analysis.get("notes"):
-        updates["notes"] = analysis["notes"]
     if analysis.get("purchase_outcome"):
         updates["purchase_outcome"] = analysis["purchase_outcome"]
     if analysis.get("competitor_brand"):
         updates["competitor_brand"] = analysis["competitor_brand"]
     if analysis.get("loss_reason"):
         updates["loss_reason"] = analysis["loss_reason"]
+
+    # Append notes with timestamp
+    if analysis.get("notes"):
+        old_notes = lead.get("notes", "") if lead else ""
+        call_num = int(lead.get("call_count", 0)) + 1 if lead else 1
+        timestamp = datetime.now().strftime("%d %b %H:%M")
+        new_note = f"[Call {call_num} - {timestamp}] {analysis['notes']}"
+        updates["notes"] = f"{old_notes}\n{new_note}".strip() if old_notes else new_note
+
+    # Append feedback notes
     if analysis.get("feedback_notes"):
-        updates["feedback_notes"] = analysis["feedback_notes"]
+        old_feedback = lead.get("feedback_notes", "") if lead else ""
+        new_feedback = analysis["feedback_notes"]
+        updates["feedback_notes"] = f"{old_feedback}\n{new_feedback}".strip() if old_feedback else new_feedback
 
     # ── Status transitions ────────────────────────────────────────────────────
     if temp == "dead" or outcome == "not_interested":
