@@ -37,10 +37,14 @@ def process_call_result(lead_id: str, analysis: dict, transcript: str, duration_
         updates["name"] = analysis["customer_name"]
 
     # Always overwrite with latest
+    if analysis.get("family_upsell_note"):
+        updates["family_info"] = analysis["family_upsell_note"]
+    if analysis.get("whatsapp_number"):
+        updates["whatsapp"] = analysis["whatsapp_number"]
     if analysis.get("interested_model"):
         updates["interested_model"] = analysis["interested_model"]
-    if analysis.get("budget"):
-        updates["budget"] = analysis["budget"]
+    if analysis.get("budget_range"):
+        updates["budget"] = analysis["budget_range"]
     if analysis.get("purchase_outcome"):
         updates["purchase_outcome"] = analysis["purchase_outcome"]
     if analysis.get("competitor_brand"):
