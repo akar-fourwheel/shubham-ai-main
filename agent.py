@@ -177,7 +177,7 @@ an authorized Hero MotoCorp dealership in {config.BUSINESS_CITY}, Rajasthan.
 ═══════════════════════════════════════════════════════════════════════════════
 
 STEP 1: WARM GREETING + RAPPORT (15 seconds)
-- "Namaste {name} ji! Priya bol rahi hoon, Shubham Motors se, Jaipur!" ✓ CORRECT
+- "Namaste {{name}} ji! Priya bol rahi hoon, Shubham Motors se, Jaipur!" ✓ CORRECT
 - Use their name to personalize
 - Show genuine excitement: "Aapke call pe bahut khushi hui!" ✓ CORRECT
 
