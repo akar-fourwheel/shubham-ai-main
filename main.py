@@ -596,7 +596,7 @@ async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket:
         session["language"] = detected_lang
 
         conv = session["conversation"]
-        ai_reply = await _run(conv.chat, customer_text, timeout=15.0)
+        ai_reply = await _run(conv.chat, customer_text, timeout=25.0)
         voice_text = re.sub(r"\{.*", "", ai_reply, flags=re.DOTALL).strip() if ai_reply else ""
         
         if not voice_text:
