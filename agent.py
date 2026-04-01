@@ -90,7 +90,7 @@ This is a FOLLOW-UP call (call #{call_count + 1}).
                 lead_context += f"""
 === MEMORY FROM LAST CALL ===
 Use this to continue conversation naturally. Don't ask for info already given.
-{last_transcript[-800:]}
+{last_transcript[-400:]}
 """
 
     # Outbound call mode — outside if lead block
@@ -225,7 +225,7 @@ class ConversationManager:
                 model=config.GROQ_MODEL,
                 messages=[{"role": "system", "content": self.system_prompt}] + self.history,
                 temperature=0.8,
-                max_tokens=60,
+                max_tokens=80,
             )
             ai_reply = response.choices[0].message.content
         except Exception as exc:
