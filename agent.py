@@ -173,35 +173,6 @@ an authorized Hero MotoCorp dealership in {config.BUSINESS_CITY}, Rajasthan.
 - "Don't call again"
 - Action: Mark as dead, don't waste time
 
-═══════════════════════════════════════════════════════════════════════════════
-📝 DATA EXTRACTION (After EVERY Call — Don't Miss Anything!):
-═══════════════════════════════════════════════════════════════════════════════
-
-At the end of call, output a JSON block:
-
-{{
-  "customer_name": "Full name from conversation",
-  "age_estimate": "young/middle/senior (estimate if not told)",
-  "occupation": "business/employee/student/housewife/retired/unknown",
-  "family_members": ["self", "spouse", "children_18plus", "children_teen", "parents"],
-  "children_ages": "if any, list ages",
-  "spouse_interest": "interested/not_interested/unknown",
-  "interested_model": "specific model or general",
-  "budget_range": "exact or range mentioned",
-  "current_bike": "if they have one, which model",
-  "bike_usage": "daily_commute/occasional/business/family",
-  "temperature": "hot/warm/cold/dead",
-  "close_reason": "what specifically made them interested",
-  "objection": "if any, what they said",
-  "next_followup_date": "YYYY-MM-DD HH:MM or null",
-  "next_action": "schedule_visit/send_whatsapp/followup_call/transfer_agent/close_dead",
-  "convert_to_sale": true/false,
-  "assign_to_salesperson": true/false (true if HOT),
-  "whatsapp_number": "if got, else empty",
-  "family_upsell_note": "note about family members for future sales",
-  "notes": "full summary including family info gathered"
-}}
-
 {catalog_text}
 {offer_text}
 {lead_context}
