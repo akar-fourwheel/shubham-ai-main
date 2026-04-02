@@ -358,14 +358,20 @@ async def handle_gather(call_sid: str, request: Request):
         conv = session["conversation"]
         voice_text = None
 
-        ai_reply = await _run(conv.chat, customer_input, timeout=15.0)
+        from intent import detect_intent
 
-        if ai_reply:
-            # Strip JSON blocks
-            voice_text = re.sub(r"\{[\s\S]*?\}", "", ai_reply).strip()
-
-        if not voice_text:
-            voice_text = "Ji, main samajh rahi hoon. Kya aap thoda aur detail de sakte hain?"
+        intent_response = detect_intent(customer_input)
+        if intent_response:
+            voice_text = intent_response
+            conv.history.append({"role": "user", "content": customer_input})
+            conv.history.append({"role": "assistant", "content": voice_text})
+            print(f"[Gather] [{call_sid}] Intent matched — skipping Groq")
+        else:
+            ai_reply = await _run(conv.chat, customer_input, timeout=15.0)
+            if ai_reply:
+                voice_text = re.sub(r"\{[\s\S]*?\}", "", ai_reply).strip()
+            if not voice_text:
+                voice_text = "Ji, main samajh rahi hoon. Kya aap thoda aur detail de sakte hain?"
 
         print(f"[Gather] [{call_sid}] Priya: {voice_text[:120]}")
 
@@ -595,12 +601,22 @@ async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket:
         detected_lang = stt_result.get("language", "hinglish")
         session["language"] = detected_lang
 
+       from intent import detect_intent
         conv = session["conversation"]
-        ai_reply = await _run(conv.chat, customer_text, timeout=25.0)
-        voice_text = re.sub(r"\{.*", "", ai_reply, flags=re.DOTALL).strip() if ai_reply else ""
         
-        if not voice_text:
-            voice_text = "Ji, main samajh rahi hoon. Kya aap thoda aur detail de sakte hain?"
+        # Try intent detection first — skip Groq if matched
+        intent_response = detect_intent(customer_text)
+        if intent_response:
+            voice_text = intent_response
+            # Still add to conversation history for context
+            conv.history.append({"role": "user", "content": customer_text})
+            conv.history.append({"role": "assistant", "content": voice_text})
+        else:
+            ai_reply = await _run(conv.chat, customer_text, timeout=25.0)
+            voice_text = re.sub(r"\{.*", "", ai_reply, flags=re.DOTALL).strip() if ai_reply else "
+        
+            if not voice_text:
+                voice_text = "Ji, main samajh rahi hoon. Kya aap thoda aur detail de sakte hain?"
 
         print(f"[Voicebot] Priya: {voice_text[:120]}")
 
