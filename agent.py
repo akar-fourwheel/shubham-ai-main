@@ -248,7 +248,13 @@ class ConversationManager:
         if not transcript.strip():
             return {}
         
+        from datetime import datetime
+        today = datetime.now().strftime("%Y-%m-%d %A")  # e.g. "2026-04-02 Thursday"
+
         prompt = f"""Analyze this sales call transcript from {config.BUSINESS_NAME} and extract key information.
+
+        TODAY'S DATE: {today}
+        Use this to convert relative dates like "Saturday", "kal", "parso" into exact YYYY-MM-DD HH:MM format.
 
 TRANSCRIPT:
 {transcript}
@@ -263,7 +269,7 @@ Return ONLY valid JSON (no markdown, no explanation):
   "spouse_interest": "did spouse show interest in bike? interested/not_interested/not_mentioned",
   "whatsapp_number": "WhatsApp number if given, else empty",
   "interested_model": "specific bike model or general interest",
-  "budget_range": "budget mentioned (exact or range)",
+  "budget_range":  "customer's own spending budget for purchasing bike, NOT competitor discounts or offers mentioned",
   "current_bike": "current bike if they have one",
   "bike_usage": "daily_commute/occasional/business/family/none",
   "temperature": "hot/warm/cold/dead",
@@ -275,7 +281,7 @@ Return ONLY valid JSON (no markdown, no explanation):
   "assign_to_salesperson": true/false,
   "sentiment": "positive/neutral/negative",
   "call_outcome": "interested/not_interested/callback_requested/converted/no_answer/dead",
-  "family_upsell_note": "note about family members for future upselling (spouse bike, children bike, etc)",
+  "family_upsell_note": "ONLY fill if customer explicitly mentioned family members during call, otherwise leave empty",
   "notes": "detailed summary including all info gathered about customer and family",
   "purchase_outcome": "converted/lost_to_codealer/lost_to_competitor/not_purchased/unknown",
   "competitor_brand": "brand or dealer name if they bought elsewhere, empty if not applicable",
