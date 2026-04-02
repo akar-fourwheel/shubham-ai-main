@@ -601,7 +601,7 @@ async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket:
         detected_lang = stt_result.get("language", "hinglish")
         session["language"] = detected_lang
 
-       from intent import detect_intent
+        from intent import detect_intent
         conv = session["conversation"]
         
         # Try intent detection first — skip Groq if matched
@@ -613,7 +613,7 @@ async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket:
             conv.history.append({"role": "assistant", "content": voice_text})
         else:
             ai_reply = await _run(conv.chat, customer_text, timeout=25.0)
-            voice_text = re.sub(r"\{.*", "", ai_reply, flags=re.DOTALL).strip() if ai_reply else "
+            voice_text = re.sub(r"\{.*", "", ai_reply, flags=re.DOTALL).strip() if ai_reply else ""
         
             if not voice_text:
                 voice_text = "Ji, main samajh rahi hoon. Kya aap thoda aur detail de sakte hain?"
