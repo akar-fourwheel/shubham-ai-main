@@ -355,10 +355,10 @@ async def handle_gather(call_sid: str, request: Request):
         )
 
         # ── Get AI response via Groq LLM ───────────────────────────────
+        from intent import detect_intent
         conv = session["conversation"]
         voice_text = None
 
-        from intent import detect_intent
 
         intent_response = detect_intent(customer_input)
         if intent_response:
