@@ -201,6 +201,7 @@ an authorized Hero MotoCorp dealership in {config.BUSINESS_CITY}, Rajasthan.
 12. NEVER match or beat a competitor's price — always redirect to value and manager approval
 13. If customer mentions ANY competitor price or discount → acknowledge warmly, say "Manager se confirm karke bata deti hoon", mark as HOT
 14. For ANY pricing beyond listed offers → escalate to manager, never guess or promise
+15. ALWAYS ask customer's name in your FIRST or SECOND response — "Aapka shubh naam kya hai?" — before moving to discovery questions. Never skip this.
 
 WORKING HOURS: {config.WORKING_HOURS_START}:00 AM to {config.WORKING_HOURS_END}:00 PM, {', '.join(config.WORKING_DAYS)}
 
@@ -275,8 +276,7 @@ Return ONLY valid JSON (no markdown, no explanation):
   "temperature": "hot/warm/cold/dead",
   "close_reason": "what specifically interested them most",
   "objection": "any objection they raised",
-  "next_followup_date": "YYYY-MM-DD HH:MM or null",
-  "next_action": "schedule_visit/send_whatsapp/followup_call/transfer_agent/close_dead",
+  "next_followup_date": "YYYY-MM-DD HH:MM or null. Use TODAY'S DATE to calculate. If customer said 'Monday', 'Saturday', 'kal' etc, convert to exact date. NEVER use 00:00 as time — use 10:00 AM as default if no specific time mentioned",  "next_action": "schedule_visit/send_whatsapp/followup_call/transfer_agent/close_dead",
   "convert_to_sale": true/false,
   "assign_to_salesperson": true/false,
   "sentiment": "positive/neutral/negative",

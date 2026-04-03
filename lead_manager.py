@@ -120,6 +120,10 @@ def _compute_followup(analysis: dict, hours_default: int = 24) -> str:
     if nf:
         try:
             dt = datetime.strptime(nf, "%Y-%m-%d %H:%M")
+            # If Groq returned midnight (00:00), replace with default working hours
+            if dt.hour == 0 and dt.minute == 0:
+                h, m = config.DEFAULT_FOLLOWUP_TIME.split(":")
+                dt = dt.replace(hour=int(h), minute=int(m))
             return dt.strftime("%Y-%m-%d %H:%M")
         except Exception:
             pass
