@@ -79,21 +79,19 @@ INTENTS = {
 }
 
 
-def detect_intent(text: str) -> str | None:
-    """
-    Check if customer input matches a known intent.
-    Returns fixed response string if matched, None if should go to Groq.
-    """
+def detect_intent(text: str, lead: dict = None) -> str | None:
     text_lower = text.lower().strip()
-
-    # Skip very short noise
     if len(text_lower) < 2:
         return None
-
+    
+    has_name = lead and lead.get("name", "").strip()
+    
     for intent_name, data in INTENTS.items():
         for pattern in data["patterns"]:
             if pattern in text_lower:
+                # Don't bypass Groq for acknowledgements if name unknown
+                if intent_name == "acknowledgement" and not has_name:
+                    return None
                 print(f"[Intent] Matched '{intent_name}' for: '{text[:50]}'")
                 return data["response"]
-
     return None

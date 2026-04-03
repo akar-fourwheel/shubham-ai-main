@@ -360,7 +360,7 @@ async def handle_gather(call_sid: str, request: Request):
         voice_text = None
 
 
-        intent_response = detect_intent(customer_input)
+        intent_response = detect_intent(customer_input, lead=session.get("lead"))
         if intent_response:
             voice_text = intent_response
             conv.history.append({"role": "user", "content": customer_input})
@@ -605,7 +605,7 @@ async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket:
         conv = session["conversation"]
         
         # Try intent detection first — skip Groq if matched
-        intent_response = detect_intent(customer_text)
+        intent_response = detect_intent(customer_text, lead=session.get("lead"))
         if intent_response:
             voice_text = intent_response
             # Still add to conversation history for context
