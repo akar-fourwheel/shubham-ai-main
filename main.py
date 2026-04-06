@@ -109,7 +109,7 @@ async def health():
 
 # ── HELPER FUNCTIONS ───────────────────────────────────────────────────────────
 
-def _is_silence(pcm: bytes, threshold: int = 200) -> bool:
+def _is_silence(pcm: bytes, threshold: int = 300) -> bool:
     samples = np.frombuffer(pcm, dtype=np.int16)
     rms = float(np.sqrt(np.mean(samples.astype(np.float32) ** 2)))
     return rms < threshold
@@ -580,7 +580,7 @@ async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket:
     session = active_calls.get(call_sid)
     if not session:
         return
-    if len(buf) < 8000:
+    if len(buf) < 4000:
         print(f"[Voicebot] Buffer too small ({len(buf)} bytes), skipping")
         return
     if _is_silence(buf):
@@ -728,7 +728,7 @@ async def voicebot_stream(websocket: WebSocket):
                 chunk = base64.b64decode(payload)
                 audio_buffer += chunk
 
-                if len(audio_buffer) >= 64000 and not _busy[0]:
+                if len(audio_buffer) >= 16000 and not _busy[0]:
                     buf = audio_buffer
                     audio_buffer = b""
                     _busy[0] = True
