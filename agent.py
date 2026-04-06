@@ -313,9 +313,7 @@ def get_opening_message(lead: dict = None, is_inbound: bool = False) -> str:
     """Generate the first thing AI says when call connects."""
     if is_inbound:
         return (
-            "Namaste! Main Priya bol rahi hoon, Shubham Motors Hero MotoCorp se, Jaipur. "
-            "Aap ka call receive karke bahut khushi hui! Kaise madad kar sakti hoon aapki? "
-            "Koi Hero baik mein interest hai aapka?"
+            "Namaste! Main Priya, Shubham Motors Hero MotoCorp Jaipur se. Kaise madad kar sakti hoon aapki? "
         )
     
     name = lead.get("name", "") if lead else ""
@@ -326,37 +324,34 @@ def get_opening_message(lead: dict = None, is_inbound: bool = False) -> str:
     if call_count >= 1:
         if name and model:
             return (
-                f"Namaste {name} ji! Main Priya bol rahi hoon Shubham Motors se. "
-                f"Aapne pehle {model} ke baare mein baat ki thi — "
-                f"kya aapne baik le li ya abhi bhi soch rahe hain?"
+                f"Namaste {name} ji! Main Priya Shubham Motors se. "
+                f"kya aapne {model} le li ya abhi bhi soch rahe hain?"
             )
         elif name:
             return (
-                f"Namaste {name} ji! Main Priya hoon Shubham Motors se. "
-                f"Aapki Hero baik enquiry ke baare mein follow up kar rahi thi — "
-                f"kya aapne koi baik le li ya abhi bhi dekh rahe hain?"
+                f"Namaste {name} ji! Main Priya Shubham Motors se. "
+                f"mein follow up kar rahi thi, kya aapne koi baik le li ya abhi bhi dekh rahe hain?"
             )
         else:
             return (
-                "Namaste! Main Priya bol rahi hoon Shubham Motors Hero MotoCorp se. "
-                "Aapki pehli enquiry ke baare mein follow up kar rahi thi — "
-                "kya aapne koi baik le li ya abhi bhi consider kar rahe hain?"
+                "Namaste! Main Priya bol rahi hoon Shubham Motors se. "
+                "Aapki enquiry ka follow up tha — "
+                "baik le li ya abhi consider kar rahe hain?"
             )
 
     # First call
     if name and model:
         return (
-            f"Namaste {name} ji! Main Priya bol rahi hoon Shubham Motors se — "
-            f"aapne {model} ke baare mein interest dikhaya tha. "
-            f"Kya aap abhi baat kar sakte hain? Main aapko kuch special information dena chahti thi!"
+            f"Namaste {name} ji! Main Priya Shubham Motors se — "
+            f"Kya abhi baat kar sakte hain? {model} ka information dena chahti thi!"
         )
     elif name:
         return (
-            f"Namaste {name} ji! Main Priya hoon, Shubham Motors Hero MotoCorp, Jaipur se. "
-            f"Aapki Hero baik enquiry ke baare mein baat karna tha — thodi si time hai aapke paas?"
+            f"Namaste {name} ji! Main Priya, Shubham Motors se. "
+            f"Aapki Hero bike enquiry ke liye 1 min baat kar sakte hain?"
         )
     else:
         return (
-            "Namaste! Main Priya bol rahi hoon Shubham Motors Hero MotoCorp se, Jaipur. "
-            "Aapki baik enquiry ke regarding call kar rahi thi — kya aap abhi baat kar sakte hain?"
+            "Namaste! Main Priya bol rahi hoon Shubham Motors se. "
+            "Aapki baik enquiry ke regarding call kar rahi thi — free hain?"
         )
