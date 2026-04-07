@@ -41,7 +41,7 @@ INTENTS = {
             "एड्रेस", "पता", "कहाँ है", "कहाँ", "कहां है", "कहां",
             "लोकेशन", "जगह", "किधर", "शोरूम कहाँ", "शोरूम का पता"
         ],
-        "response": "Hamare showroom ka address hai — Lal Kothi, Tonk Road, Jaipur. Subah 9 baje se shaam 7 baje tak khula rehta hai!"
+        "response": "Showroom aa jaaiye, Lal Kothi Tonk Road, Jaipur. Subah 9 se shaam 7 baje tak khula hai."
     },
     "timing": {
         "patterns": [
@@ -49,7 +49,7 @@ INTENTS = {
             "khula", "showroom ka time", "showroom ki timing", "टाइम", "समय", 
             "कितने बजे", "कब खुलता", "बंद कब", "वर्किंग आवर्स", "खुला रहेगा", "शोरूम का टाइम", "शोरूम की टाइमिंग"
         ],
-        "response": "Hamare showroom ki timing hai subah 9 baje se shaam 7 baje tak, Monday se Saturday."
+        "response": "Hamare showroom ki timing hai Monday se Saturday, subah 9 se shaam 7 baje tak."
     },
     "test_ride": {
         "patterns": [
@@ -57,7 +57,7 @@ INTENTS = {
             "drive karna", "ride karna", "टेस्ट राइड", "टेस्ट ड्राइव", "चलाना", 
             "चला के देखना", "ड्राइव करना", "राइड करना", "चलाकर देखना"
         ],
-        "response": "Bilkul ji! Test ride completely free hai, koi commitment nahi. Aap kab aa sakte hain?"
+        "response": "Test ride completely free hai, koi commitment nahi. Aap kab aa sakte hain?"
     },
     "not_interested": {
         "patterns": [

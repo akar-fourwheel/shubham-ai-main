@@ -20,6 +20,10 @@ import config
 from scraper import get_bike_catalog, format_catalog_for_ai
 from sheets_manager import get_active_offers, get_loss_reasons
 
+import os
+print("OPENAI_BASE_URL:", os.environ.get("OPENAI_BASE_URL"))
+print("OPENAI_API_BASE:", os.environ.get("OPENAI_API_BASE"))
+
 log = logging.getLogger("shubham-ai.agent")
 
 def _get_groq_client() -> Groq:
