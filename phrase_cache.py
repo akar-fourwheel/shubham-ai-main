@@ -7,6 +7,7 @@ from difflib import SequenceMatcher
 from voice import synthesize_speech
 from audio_utils import _mp3_to_pcm
 
+logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("shubham-ai.phrase_cache")
 
 CACHED_PHRASES = [
