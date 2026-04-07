@@ -39,6 +39,7 @@ from scraper import parse_offer_file, scrape_hero_website
 from scheduler import start_scheduler, stop_scheduler
 from voice import synthesize_speech, transcribe_audio
 from keep_alive import keep_alive
+from audio_utils import _mp3_to_pcm, _pcm_to_wav, _is_silence
 
 # ── STARTUP / SHUTDOWN ─────────────────────────────────────────────────────────
 @asynccontextmanager
@@ -71,6 +72,15 @@ async def lifespan(app: FastAPI):
             print("[Startup] ⚠️ Greeting prewarm failed")
 
     asyncio.create_task(_prewarm())
+
+    async def _build_phrase_cache():
+        await asyncio.sleep(8)  # let greeting prewarm finish first
+        from phrase_cache import build_cache
+        import asyncio as _asyncio
+        loop = _asyncio.get_running_loop()
+        await loop.run_in_executor(_executor, build_cache)
+
+    asyncio.create_task(_build_phrase_cache())
 
     yield
 
@@ -108,11 +118,6 @@ async def health():
 
 
 # ── HELPER FUNCTIONS ───────────────────────────────────────────────────────────
-
-def _is_silence(pcm: bytes, threshold: int = 300) -> bool:
-    samples = np.frombuffer(pcm, dtype=np.int16)
-    rms = float(np.sqrt(np.mean(samples.astype(np.float32) ** 2)))
-    return rms < threshold
 
 def _hangup_xml() -> str:
     return '<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>'
@@ -388,13 +393,19 @@ async def handle_gather(call_sid: str, request: Request):
         # ── Generate TTS audio ─────────────────────────────────────────
         audio_url = None
 
-        ai_audio = await _run(synthesize_speech, voice_text, lang, timeout=12.0)
-
-        if ai_audio:
-            audio_path = UPLOAD_DIR / f"response_{call_sid}.mp3"
-            audio_path.write_bytes(ai_audio)
-
+        from phrase_cache import get_cached_audio
+        cached_pcm = get_cached_audio(voice_text)
+        if cached_pcm:
+            print(f"[PhraseCache] Gather: serving cached audio ({len(cached_pcm)} bytes)")
+            audio_path = UPLOAD_DIR / f"response_{call_sid}.wav"
+            audio_path.write_bytes(cached_pcm)
             audio_url = f"{config.PUBLIC_URL}/call/audio/response/{call_sid}"
+        else:
+            ai_audio = await _run(synthesize_speech, voice_text, lang, timeout=12.0)
+            if ai_audio:
+                audio_path = UPLOAD_DIR / f"response_{call_sid}.mp3"
+                audio_path.write_bytes(ai_audio)
+                audio_url = f"{config.PUBLIC_URL}/call/audio/response/{call_sid}"
 
         # ── Return response to Exotel ──────────────────────────────────
         if audio_url:
@@ -476,11 +487,12 @@ async def serve_opening_audio(call_sid: str):
 
 @app.get("/call/audio/response/{call_sid}")
 async def serve_response_audio(call_sid: str):
-    path = UPLOAD_DIR / f"response_{call_sid}.mp3"
-    if not path.exists():
-        return Response(status_code=404)
-    return Response(content=path.read_bytes(), media_type="audio/mpeg")
-
+    for ext in ["mp3", "wav"]:
+        path = UPLOAD_DIR / f"response_{call_sid}.{ext}"
+        if path.exists():
+            media_type = "audio/mpeg" if ext == "mp3" else "audio/wav"
+            return Response(content=path.read_bytes(), media_type=media_type)
+    return Response(status_code=404)
 
 # ── ADMIN API ──────────────────────────────────────────────────────────────────
 
@@ -620,9 +632,14 @@ async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket:
 
         print(f"[Voicebot] Priya: {voice_text[:120]}")
 
-        audio = await _run(synthesize_speech, voice_text, detected_lang, timeout=12.0)
-        if audio:
-            pcm = await _run(_mp3_to_pcm, audio, timeout=5.0)
+        from phrase_cache import get_cached_audio
+        pcm = get_cached_audio(voice_text)
+        if pcm:
+            print(f"[PhraseCache] Serving cached audio ({len(pcm)} bytes)")
+        else:
+            audio = await _run(synthesize_speech, voice_text, detected_lang, timeout=12.0)
+            if audio:
+                pcm = await _run(_mp3_to_pcm, audio, timeout=5.0)
             if pcm:
                 b64 = base64.b64encode(pcm).decode("ascii")
                 await websocket.send_text(json.dumps({
@@ -760,46 +777,6 @@ async def voicebot_stream(websocket: WebSocket):
             end_call_session(call_sid, 0)
 
 # ── AUDIO CONVERSION HELPERS ───────────────────────────────────────────────────
-
-def _pcm_to_wav(pcm_bytes: bytes, sample_rate: int = 8000) -> bytes:
-    """Convert raw PCM bytes to WAV format for Sarvam STT."""
-    import io, wave
-    buf = io.BytesIO()
-    with wave.open(buf, 'wb') as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)  # 16-bit
-        wf.setframerate(sample_rate)
-        wf.writeframes(pcm_bytes)
-    return buf.getvalue()
-
-
-def _mp3_to_pcm(mp3_bytes: bytes) -> bytes:
-    """Convert audio bytes (WAV or MP3) to raw PCM 16-bit 8kHz mono for Exotel."""
-    try:
-        from pydub import AudioSegment
-        import io
-        
-        if not mp3_bytes or len(mp3_bytes) < 100:
-            print(f"[Audio] Audio too small: {len(mp3_bytes)} bytes")
-            return b""
-        
-        # Detect format from magic bytes
-        if mp3_bytes[:4] == b'RIFF':
-            fmt = "wav"
-        elif mp3_bytes[:3] == b'ID3' or mp3_bytes[:2] in (b'\xff\xfb', b'\xff\xf3'):
-            fmt = "mp3"
-        else:
-            fmt = "wav"  # Sarvam default
-        
-        print(f"[Audio] Converting {fmt} ({len(mp3_bytes)} bytes) to PCM")
-        audio = AudioSegment.from_file(io.BytesIO(mp3_bytes), format=fmt)
-        audio = audio.set_frame_rate(8000).set_channels(1).set_sample_width(2)
-        print(f"[Audio] PCM ready: {len(audio.raw_data)} bytes")
-        return audio.raw_data
-    except Exception as e:
-        print(f"[Audio] Audio to PCM failed: {e}")
-        return b""
-
 
 def _encode_pcm(pcm_bytes: bytes) -> str:
     """Base64 encode PCM bytes for Exotel WebSocket."""
