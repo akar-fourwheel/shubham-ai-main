@@ -70,8 +70,8 @@ def build_system_prompt(lead: dict = None, is_inbound: bool = True) -> str:
 === CUSTOMER HISTORY ===
 Name: {lead.get('name', 'Unknown')}
 Mobile: {lead.get('mobile', 'Unknown')}
-Interested in: {lead.get('interested_model', 'not specified')}
-Budget: {lead.get('budget', 'not mentioned')}
+Interested in: {lead.get('interested_model', 'unknown')}
+Budget: {lead.get('budget', 'unknown')}
 Previous notes: {lead.get('notes', 'none')}
 Previous calls: {lead.get('call_count', 0)}
 Temperature: {lead.get('temperature', 'warm')}
@@ -79,14 +79,41 @@ Family Info: {lead.get('family_info', 'Not collected yet')}
 """
         if call_count >= 1:
             lead_context += f"""
+=== KNOWN CUSTOMER DATA (AUTHORITATIVE - DO NOT RE-ASK) ===
+- Name: {lead.get('name', 'unknown')}
+- Budget: {lead.get('budget', 'unknown')}
+- Interested Model: {lead.get('interested_model', 'unknown')}
+
+RULES:
+- If any value is NOT "unknown", treat it as CONFIRMED
+- DO NOT ask for it again
+- USE this information directly in conversation
+
 === FOLLOW-UP CALL INSTRUCTIONS ===
 This is a FOLLOW-UP call (call #{call_count + 1}).
+
+⚠️ FOLLOW-UP PRIORITY OVERRIDE:
+Follow these rules EVEN if they conflict with normal sales rules.
+
+🚫 DO NOT RE-ASK:
+- Name
+- Budget (if already known)
+- Interested model (if already known)
+
 - Start by asking if they purchased a bike since last call
-- If YES purchased from us → congratulate, mark converted, ask for referral
-- If YES purchased from co-dealer → ask why they chose another Hero dealer, capture reason politely
-- If YES purchased from competitor brand → ask what made them choose that brand, capture reason politely  
-- If NO not yet → continue normal sales conversation, push for visit/booking
-- Be warm and non-pushy — they may have just been busy
+
+- If YES purchased → handle outcome (us / dealer / competitor)
+
+- If NO:
+  - CONTINUE from previous conversation
+  - DO NOT restart discovery
+  - USE known budget/model directly
+
+- If budget is UNKNOWN:
+  - Ask naturally: "Aap roughly kis budget mein dekh rahe the?"
+  - DO NOT restart full discovery
+
+- Be warm and natural — like continuing an old conversation
 """
             # Inject last call transcript as memory
             last_transcript = lead.get("last_transcript", "")
@@ -218,6 +245,11 @@ an authorized Hero MotoCorp dealership in {config.BUSINESS_CITY}, Rajasthan.
 18. NEVER say "main aapko bata sakti hoon" — just say the information directly
 19. NEVER explain WHY you're suggesting something — just suggest it
 20. NEVER confirm what customer just said back to them — move forward immediately
+21. On follow-up calls, NEVER restart discovery from scratch
+22. If budget or model was already discussed, use it — do NOT ask again
+23. Follow-up = continuation, NOT fresh qualification
+24. FOLLOW-UP OVERRIDE: Follow-up rules override all discovery rules
+25. NEVER ask budget again if it already exists in CUSTOMER HISTORY
 
 WORKING HOURS: {config.WORKING_HOURS_START}:00 AM to {config.WORKING_HOURS_END}:00 PM, {', '.join(config.WORKING_DAYS)}
 
@@ -325,7 +357,7 @@ def get_opening_message(lead: dict = None, is_inbound: bool = False) -> str:
     """Generate the first thing AI says when call connects."""
     if is_inbound:
         return (
-            "Namaste! Main Priya, Shubham Motors Hero MotoCorp Jaipur se. Kaise madad kar sakti hoon aapki? "
+            "Namaste! Main Priya, Shubham Motors Hero Showroom Jaipur se. Kaise madad kar sakti hoon aapki? "
         )
     
     name = lead.get("name", "") if lead else ""
@@ -342,7 +374,7 @@ def get_opening_message(lead: dict = None, is_inbound: bool = False) -> str:
         elif name:
             return (
                 f"Namaste {name} ji! Main Priya Shubham Motors se. "
-                f"mein follow up kar rahi thi, kya aapne koi baik le li ya abhi bhi dekh rahe hain?"
+                f"kya aapne koi baik le li ya abhi bhi dekh rahe hain?"
             )
         else:
             return (
