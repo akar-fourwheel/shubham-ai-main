@@ -1,5 +1,5 @@
 """
-voice_optimized.py
+voice.py
 Handles Speech-to-Text (Sarvam primary, Deepgram fallback) and Text-to-Speech (Sarvam).
 
 OPTIMIZATIONS:
@@ -13,7 +13,7 @@ OPTIMIZATIONS:
 import base64, re
 import httpx
 import asyncio
-import config_optimized as config
+import config as config
 
 # 🔥 OPTIMIZATION: Persistent HTTP client with connection pooling
 # Reuses TCP connections — saves ~100-200ms per request (no new TLS handshake)
