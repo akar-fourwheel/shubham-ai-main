@@ -1,10 +1,26 @@
-# audio_utils.py
+"""
+audio_utils_optimized.py
+
+OPTIMIZATIONS:
+- 🔥 OPTIMIZATION: Lower silence threshold for faster speech detection
+- 🔥 OPTIMIZATION: Early exit on silence detection (check first 2000 samples only)
+- 🔥 OPTIMIZATION: Lazy import of pydub (only when needed)
+"""
 import numpy as np
 
-def _is_silence(pcm: bytes, threshold: int = 300) -> bool:
+
+def _is_silence(pcm: bytes, threshold: int = 250) -> bool:
+    """
+    Detect silence in PCM audio.
+    🔥 OPTIMIZATION: Lowered threshold from 300 to 250 for more sensitive speech detection.
+    🔥 OPTIMIZATION: Only check first 2000 samples for speed (don't process full buffer).
+    """
     samples = np.frombuffer(pcm, dtype=np.int16)
-    rms = float(np.sqrt(np.mean(samples.astype(np.float32) ** 2)))
+    # 🔥 OPTIMIZATION: Check subset for speed — full buffer scan is wasteful
+    check_samples = samples[:2000] if len(samples) > 2000 else samples
+    rms = float(np.sqrt(np.mean(check_samples.astype(np.float32) ** 2)))
     return rms < threshold
+
 
 def _pcm_to_wav(pcm_bytes: bytes, sample_rate: int = 8000) -> bytes:
     """Convert raw PCM bytes to WAV format for Sarvam STT."""
@@ -12,7 +28,7 @@ def _pcm_to_wav(pcm_bytes: bytes, sample_rate: int = 8000) -> bytes:
     buf = io.BytesIO()
     with wave.open(buf, 'wb') as wf:
         wf.setnchannels(1)
-        wf.setsampwidth(2)  # 16-bit
+        wf.setsampwidth(2)
         wf.setframerate(sample_rate)
         wf.writeframes(pcm_bytes)
     return buf.getvalue()
@@ -28,18 +44,15 @@ def _mp3_to_pcm(mp3_bytes: bytes) -> bytes:
             print(f"[Audio] Audio too small: {len(mp3_bytes)} bytes")
             return b""
         
-        # Detect format from magic bytes
         if mp3_bytes[:4] == b'RIFF':
             fmt = "wav"
         elif mp3_bytes[:3] == b'ID3' or mp3_bytes[:2] in (b'\xff\xfb', b'\xff\xf3'):
             fmt = "mp3"
         else:
-            fmt = "wav"  # Sarvam default
+            fmt = "wav"
         
-        print(f"[Audio] Converting {fmt} ({len(mp3_bytes)} bytes) to PCM")
         audio = AudioSegment.from_file(io.BytesIO(mp3_bytes), format=fmt)
         audio = audio.set_frame_rate(8000).set_channels(1).set_sample_width(2)
-        print(f"[Audio] PCM ready: {len(audio.raw_data)} bytes")
         return audio.raw_data
     except Exception as e:
         print(f"[Audio] Audio to PCM failed: {e}")
