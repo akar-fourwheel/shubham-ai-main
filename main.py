@@ -745,7 +745,7 @@ async def voicebot_stream(websocket: WebSocket):
                 chunk = base64.b64decode(payload)
                 audio_buffer += chunk
 
-                if len(audio_buffer) >= 16000 and not _busy[0]:
+                if len(audio_buffer) >= config.WS_AUDIO_BUFFER_THRESHOLD and not _busy[0]:
                     buf = audio_buffer
                     audio_buffer = b""
                     _busy[0] = True
