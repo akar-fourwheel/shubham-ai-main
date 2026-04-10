@@ -37,7 +37,7 @@ from lead_manager import process_call_result, add_leads_from_import, get_dashboa
 from exotel_client import make_outbound_call
 from scraper import parse_offer_file, scrape_hero_website
 from scheduler import start_scheduler, stop_scheduler
-from voice import synthesize_speech, transcribe_audio
+from voice import synthesize_speech, transcribe_audio, synthesize_speech_async, transcribe_audio_async
 from keep_alive import keep_alive
 from audio_utils import _mp3_to_pcm, _pcm_to_wav, _is_silence
 
@@ -603,7 +603,7 @@ async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket:
         if not wav_bytes:
             print("[Voicebot] Audio conversion failed")
             return
-        stt_result = await _run(transcribe_audio, wav_bytes, "hi-IN", timeout=10.0)
+        stt_result = await transcribe_audio_async(wav_bytes, "hi-IN")
         customer_text = stt_result.get("text", "").strip() if stt_result else ""
         print(f"[Voicebot] STT: '{customer_text[:120]}'")
 
@@ -637,7 +637,7 @@ async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket:
         if pcm:
             print(f"[PhraseCache] Serving cached audio ({len(pcm)} bytes)")
         else:
-            audio = await _run(synthesize_speech, voice_text, detected_lang, timeout=12.0)
+            audio = await synthesize_speech_async(voice_text, detected_lang)
             if audio:
                 pcm = await _run(_mp3_to_pcm, audio, timeout=5.0)
         if pcm:
