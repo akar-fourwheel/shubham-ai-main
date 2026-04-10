@@ -20,17 +20,16 @@ import config
 from scraper import get_bike_catalog, format_catalog_for_ai
 from sheets_manager import get_active_offers, get_loss_reasons
 
-import os
-print("OPENAI_BASE_URL:", os.environ.get("OPENAI_BASE_URL"))
-print("OPENAI_API_BASE:", os.environ.get("OPENAI_API_BASE"))
-
 log = logging.getLogger("shubham-ai.agent")
 
+_groq_client = None
 def _get_groq_client() -> Groq:
-    """Lazy-initialise Groq client so missing key doesn't crash at import time."""
-    if not config.GROQ_API_KEY:
-        raise RuntimeError("GROQ_API_KEY is not configured")
-    return Groq(api_key=config.GROQ_API_KEY)
+    global _groq_client
+    if _groq_client is None:
+        if not config.GROQ_API_KEY:
+            raise RuntimeError("GROQ_API_KEY is not configured")
+        _groq_client = Groq(api_key=config.GROQ_API_KEY)
+    return _groq_client
     
 # ── SYSTEM PROMPT ─────────────────────────────────────────────────────────────
 
@@ -265,14 +264,22 @@ class ConversationManager:
         self.history = []
         self.system_prompt = build_system_prompt(lead, is_inbound=is_inbound)
     
+    def add_exchange(self, user_text: str, ai_text: str):
+        self.history.append({"role": "user", "content": user_text})
+        self.history.append({"role": "assistant", "content": ai_text})
+
+    def add_ai_message(self, ai_text: str):
+        self.history.append({"role": "assistant", "content": ai_text})
+
     def chat(self, user_message: str) -> str:
         self.history.append({"role": "user", "content": user_message})
         
         try:
             client = _get_groq_client()
+            trimmed_history = self.history[-6:] if len(self.history) > 6 else self.history
             response = client.chat.completions.create(
                 model=config.GROQ_MODEL,
-                messages=[{"role": "system", "content": self.system_prompt}] + self.history,
+                messages=[{"role": "system", "content": self.system_prompt}] + trimmed_history,
                 temperature=0.8,
                 max_tokens=80,
             )
@@ -340,7 +347,7 @@ Return ONLY valid JSON (no markdown, no explanation):
         try:
             client = _get_groq_client()
             r = client.chat.completions.create(
-                model=config.GROQ_MODEL,
+                model=config.GROQ_FAST_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0,
                 max_tokens=500,
