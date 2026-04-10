@@ -640,17 +640,17 @@ async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket:
             audio = await _run(synthesize_speech, voice_text, detected_lang, timeout=12.0)
             if audio:
                 pcm = await _run(_mp3_to_pcm, audio, timeout=5.0)
-            if pcm:
-                b64 = base64.b64encode(pcm).decode("ascii")
-                await websocket.send_text(json.dumps({
-                    "event": "media",
-                    "stream_sid": stream_sid,
-                    "media": {"payload": b64}
-                }))
-                print(f"[Voicebot] Sent response ({len(pcm)} bytes)")
-                response_secs = len(pcm) / 16000  # 8kHz 16-bit = 16000 bytes/sec
-                state["listen_after"] = time.monotonic() + response_secs + 0.8
-                print(f"[Voicebot] Blocking input for {response_secs:.1f}s")
+        if pcm:
+            b64 = base64.b64encode(pcm).decode("ascii")
+            await websocket.send_text(json.dumps({
+                "event": "media",
+                "stream_sid": stream_sid,
+                "media": {"payload": b64}
+            }))
+            print(f"[Voicebot] Sent response ({len(pcm)} bytes)")
+            response_secs = len(pcm) / 16000  # 8kHz 16-bit = 16000 bytes/sec
+            state["listen_after"] = time.monotonic() + response_secs + 0.8
+            print(f"[Voicebot] Blocking input for {response_secs:.1f}s")
 
     except Exception as e:
         print(f"[Voicebot] _process_speech error: {e}")
