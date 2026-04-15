@@ -12,12 +12,12 @@ OPTIMIZATIONS:
 INTENTS = {
     "yes_visit": {
         "patterns": frozenset([
-            "aa jaunga", "aa jaungi", "aaonga", "aaunga", "aa sakta",
-            "aa sakti", "aata hoon", "aati hoon", "visit karunga", "aaugi",
+            "aa jaunga", "aa jaungi", "aaonga", "aaunga",
+            "aata hoon", "aati hoon", "visit karunga", "aaugi",
             "aa jaugi", "showroom aaunga", "showroom aaugi",
-            "आ जाऊँगा", "आ जाऊँगी", "आ सकता", "आ सकती",
-            "आता हूँ", "आती हूँ", "आ जाऊंगा", "आ जाऊंगी",
-            "शोरूम आऊँगा", "शोरूम आऊँगी", "आऊँगा", "आऊँगी",
+            "आ जाऊँगा", "आ जाऊँगी", "आता हूँ", "आती हूँ",
+            "आ जाऊंगा", "आ जाऊंगी", "शोरूम आऊँगा", 
+            "शोरूम आऊँगी", "आऊँगा", "आऊँगी",
             "aa jata hoon", "aa raha hoon", "aa rahe hain",
         ]),
         # 🔥 OPTIMIZATION: Shorter response — fewer TTS characters

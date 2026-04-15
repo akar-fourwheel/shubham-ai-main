@@ -9,7 +9,7 @@ OPTIMIZATIONS:
 import numpy as np
 
 
-def _is_silence(pcm: bytes, threshold: int = 250) -> bool:
+def _is_silence(pcm: bytes, threshold: int = 400) -> bool:
     """
     Detect silence in PCM audio.
     🔥 OPTIMIZATION: Lowered threshold from 300 to 250 for more sensitive speech detection.
