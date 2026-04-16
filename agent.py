@@ -249,6 +249,7 @@ an authorized Hero MotoCorp dealership in {config.BUSINESS_CITY}, Rajasthan.
 23. Follow-up = continuation, NOT fresh qualification
 24. FOLLOW-UP OVERRIDE: Follow-up rules override all discovery rules
 25. NEVER ask budget again if it already exists in CUSTOMER HISTORY
+26. SHORT SINGLE-WORD REPLIES are answers to your last question — always read them in context, never in isolation.
 
 WORKING HOURS: {config.WORKING_HOURS_START}:00 AM to {config.WORKING_HOURS_END}:00 PM, {', '.join(config.WORKING_DAYS)}
 

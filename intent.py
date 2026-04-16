@@ -52,17 +52,6 @@ INTENTS = {
         ]),
         "response": "Bilkul! Kab call karoon — subah ya shaam?"
     },
-    "acknowledgement": {
-        "patterns": frozenset([
-            "haan", "han", "haa", "ok", "okay", "theek", "theek hai",
-            "ji haan", "bilkul", "sahi", "accha", "acha", "hmm", "hm",
-            "हाँ", "हां", "ठीक है", "ठीक", "जी", "जी हाँ", "बिल्कुल",
-            "सही", "अच्छा", "हम्म",
-        ]),
-        # 🔥 FIX: Removed short patterns ('ha', 'g', 'ji') that cause false-positive
-        # substring matches in words like 'kahan', 'glamour', 'jaipur' etc.
-        "response": "Accha ji! Kab showroom aa sakte hain test ride ke liye?"
-    },
     "address": {
         "patterns": frozenset([
             "address", "kahan hai", "kahan he", "location", "showroom kahan",

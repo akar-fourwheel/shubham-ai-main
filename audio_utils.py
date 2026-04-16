@@ -8,17 +8,9 @@ OPTIMIZATIONS:
 """
 import numpy as np
 
-
-def _is_silence(pcm: bytes, threshold: int = 150) -> bool:
-    """
-    Detect silence in PCM audio.
-    🔥 OPTIMIZATION: Lowered threshold from 300 to 250 for more sensitive speech detection.
-    🔥 OPTIMIZATION: Only check first 2000 samples for speed (don't process full buffer).
-    """
+def _is_silence(pcm: bytes, threshold: int = 80) -> bool:
     samples = np.frombuffer(pcm, dtype=np.int16)
-    # 🔥 OPTIMIZATION: Check subset for speed — full buffer scan is wasteful
-    check_samples = samples[:2000] if len(samples) > 2000 else samples
-    rms = float(np.sqrt(np.mean(check_samples.astype(np.float32) ** 2)))
+    rms = float(np.sqrt(np.mean(samples.astype(np.float32) ** 2)))
     return rms < threshold
 
 

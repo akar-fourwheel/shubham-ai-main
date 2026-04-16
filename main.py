@@ -592,7 +592,7 @@ async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket:
     session = active_calls.get(call_sid)
     if not session:
         return
-    if len(buf) < 6000:
+    if len(buf) < 3200:
         print(f"[Voicebot] Buffer too small ({len(buf)} bytes), skipping")
         return
     if _is_silence(buf):
