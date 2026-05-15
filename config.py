@@ -29,10 +29,14 @@ EXOTEL_APP_ID       = os.getenv("EXOTEL_APP_ID", "1186396")
 GROQ_API_KEY        = os.getenv("GROQ_API_KEY", "").strip()
 
 # 🔥 OPTIMIZATION: Hybrid model routing — fast model for simple queries, smart model for complex
-GROQ_FAST_MODEL     = os.getenv("GROQ_FAST_MODEL", "llama-3.1-8b-instant").strip()
-GROQ_SMART_MODEL    = os.getenv("GROQ_SMART_MODEL", "llama-3.3-70b-versatile").strip()
-# Keep original for backward compatibility
-GROQ_MODEL          = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
+# GROQ_FAST_MODEL     = os.getenv("GROQ_FAST_MODEL", "llama-3.1-8b-instant").strip()
+# GROQ_SMART_MODEL    = os.getenv("GROQ_SMART_MODEL", "llama-3.3-70b-versatile").strip()
+# # Keep original for backward compatibility
+# GROQ_MODEL          = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
+
+GEMINI_API_KEY     = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL       = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()      # main chat
+GEMINI_FAST_MODEL  = os.getenv("GEMINI_FAST_MODEL", "gemini-2.5-flash").strip() # call analysis
 
 DEEPGRAM_API_KEY    = os.getenv("DEEPGRAM_API_KEY", "").strip()
 SARVAM_API_KEY      = os.getenv("SARVAM_API_KEY", "").strip()
@@ -101,8 +105,8 @@ def validate_config() -> list:
         warnings.append("EXOTEL_API_KEY is not set -- outbound calls will fail")
     if not EXOTEL_API_TOKEN:
         warnings.append("EXOTEL_API_TOKEN is not set -- outbound calls will fail")
-    if not GROQ_API_KEY:
-        warnings.append("GROQ_API_KEY is not set -- AI conversations will fail")
+    if not GEMINI_API_KEY:
+        warnings.append("GEMINI_API_KEY is not set -- AI conversations will fail")
     if not SARVAM_API_KEY:
         warnings.append("SARVAM_API_KEY is not set -- TTS/STT will fall back to Deepgram only")
     if not DEEPGRAM_API_KEY:

@@ -2,7 +2,7 @@
 agent.py
 The AI brain — WORLD-CLASS SALES AI with advanced persuasion techniques.
 Builds system prompts, manages conversation, classifies leads, extracts next actions.
-Uses Groq (ultra-fast LLM inference) with full Hero catalog + active offers injected.
+Uses Gemini 2.5 Flash (thinking disabled for low latency) with full Hero catalog + active offers injected.
 
 TRAINING: This AI is trained with world's best sales techniques:
 - Dale Carnegie principles
@@ -14,7 +14,7 @@ TRAINING: This AI is trained with world's best sales techniques:
 import json, re, logging
 from datetime import datetime, timedelta
 
-from groq import Groq
+import google.generativeai as genai
 
 import config
 from scraper import get_bike_catalog, format_catalog_for_ai
@@ -22,14 +22,14 @@ from sheets_manager import get_active_offers, get_loss_reasons
 
 log = logging.getLogger("shubham-ai.agent")
 
-_groq_client = None
-def _get_groq_client() -> Groq:
-    global _groq_client
-    if _groq_client is None:
-        if not config.GROQ_API_KEY:
-            raise RuntimeError("GROQ_API_KEY is not configured")
-        _groq_client = Groq(api_key=config.GROQ_API_KEY)
-    return _groq_client
+_gemini_configured = False
+def _ensure_gemini() -> None:
+    global _gemini_configured
+    if not _gemini_configured:
+        if not config.GEMINI_API_KEY:
+            raise RuntimeError("GEMINI_API_KEY is not configured")
+        genai.configure(api_key=config.GEMINI_API_KEY)
+        _gemini_configured = True
     
 # ── SYSTEM PROMPT ─────────────────────────────────────────────────────────────
 
@@ -276,17 +276,32 @@ class ConversationManager:
         self.history.append({"role": "user", "content": user_message})
         
         try:
-            client = _get_groq_client()
-            trimmed_history = self.history[-6:] if len(self.history) > 6 else self.history
-            response = client.chat.completions.create(
-                model=config.GROQ_MODEL,
-                messages=[{"role": "system", "content": self.system_prompt}] + trimmed_history,
-                temperature=0.8,
-                max_tokens=80,
+            _ensure_gemini()
+            # Build Gemini-format history (all messages except the last user one we just appended)
+            trimmed = self.history[-6:] if len(self.history) > 6 else self.history
+            gemini_history = [
+                {
+                    "role": "model" if m["role"] == "assistant" else "user",
+                    "parts": [m["content"]],
+                }
+                for m in trimmed[:-1]  # exclude the current user message
+            ]
+            model = genai.GenerativeModel(
+                model_name=config.GEMINI_MODEL,
+                system_instruction=self.system_prompt,
             )
-            ai_reply = response.choices[0].message.content
+            chat_session = model.start_chat(history=gemini_history)
+            response = chat_session.send_message(
+                user_message,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.8,
+                    max_output_tokens=80,
+                    # thinking_config disabled — keeps latency low for phone calls
+                ),
+            )
+            ai_reply = response.text
         except Exception as exc:
-            log.error("Groq chat failed: %s", exc)
+            log.error("Gemini chat failed: %s", exc)
             ai_reply = "Ji, main samajh rahi hoon. Kya aap thoda aur detail de sakte hain?"
 
         self.history.append({"role": "assistant", "content": ai_reply})
@@ -300,7 +315,7 @@ class ConversationManager:
         return "\n".join(lines)
     
     def analyze_call(self) -> dict:
-        """Ask Groq to analyze full conversation and extract structured data."""
+        """Ask Gemini to analyze full conversation and extract structured data."""
         transcript = self.get_full_transcript()
         if not transcript.strip():
             return {}
@@ -346,14 +361,16 @@ Return ONLY valid JSON (no markdown, no explanation):
 }}"""
         
         try:
-            client = _get_groq_client()
-            r = client.chat.completions.create(
-                model=config.GROQ_FAST_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0,
-                max_tokens=500,
+            _ensure_gemini()
+            model = genai.GenerativeModel(config.GEMINI_FAST_MODEL)
+            response = model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0,
+                    max_output_tokens=500,
+                ),
             )
-            raw = r.choices[0].message.content.strip()
+            raw = response.text.strip()
             raw = re.sub(r"```json|```", "", raw).strip()
             return json.loads(raw)
         except Exception as e:
