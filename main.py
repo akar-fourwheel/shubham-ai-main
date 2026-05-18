@@ -610,6 +610,12 @@ async def _process_speech(buf: bytes, call_sid: str, stream_sid: str, websocket:
         if not customer_text:
             return
 
+        # Fix: filter filler sounds (single syllables, "हाँ", "अ", "हम्म" etc.)
+        # These trigger a full LLM+TTS cycle for zero conversational value
+        if len(customer_text.strip()) < 3:
+            print(f"[Voicebot] STT too short, skipping: '{customer_text}'")
+            return
+
         detected_lang = stt_result.get("language", "hinglish")
         session["language"] = detected_lang
 
@@ -737,6 +743,9 @@ async def voicebot_stream(websocket: WebSocket):
                 if _busy[0]:
                     continue
                 if time.monotonic() < state["listen_after"]:
+                    # Discard audio received while bot is speaking — prevents
+                    # buffered audio firing immediately when the block expires
+                    audio_buffer = b""
                     continue
                 payload = data.get("media", {}).get("payload", "")
                 if not payload:
@@ -747,7 +756,7 @@ async def voicebot_stream(websocket: WebSocket):
 
                 if len(audio_buffer) >= config.WS_AUDIO_BUFFER_THRESHOLD and not _busy[0]:
                     buf = audio_buffer
-                    audio_buffer = b""
+                    audio_buffer = b""  # clear before task so new chunks go into fresh buffer
                     _busy[0] = True
 
                     async def handle_speech(b=buf):

@@ -51,20 +51,31 @@ _exact_index: dict[str, bytes] = {}
 
 def build_cache() -> None:
     """Generate PCM audio for all cached phrases. Call at startup."""
+    import time as _time
     success = 0
     for phrase in CACHED_PHRASES:
-        try:
-            audio = synthesize_speech(phrase, "hinglish")
-            if audio:
-                pcm = _mp3_to_pcm(audio)
-                if pcm:
-                    _cache[phrase] = pcm
-                    # 🔥 OPTIMIZATION: Build normalized index for fast exact matching
-                    _exact_index[phrase.strip().lower()] = pcm
-                    success += 1
-                    log.info(f"[PhraseCache] Cached: '{phrase[:50]}' ({len(pcm)} bytes)")
-        except Exception as e:
-            log.warning(f"[PhraseCache] Failed: '{phrase[:40]}': {e}")
+        # Retry up to 3 times — Sarvam TTS can timeout on cold starts
+        for attempt in range(3):
+            try:
+                audio = synthesize_speech(phrase, "hinglish")
+                if audio:
+                    pcm = _mp3_to_pcm(audio)
+                    if pcm:
+                        _cache[phrase] = pcm
+                        _exact_index[phrase.strip().lower()] = pcm
+                        success += 1
+                        log.info(f"[PhraseCache] Cached: '{phrase[:50]}' ({len(pcm)} bytes)")
+                        break  # success — move to next phrase
+                    else:
+                        log.warning(f"[PhraseCache] PCM conversion failed (attempt {attempt+1}): '{phrase[:40]}'")
+                else:
+                    log.warning(f"[PhraseCache] No audio returned (attempt {attempt+1}): '{phrase[:40]}'")
+            except Exception as e:
+                log.warning(f"[PhraseCache] Failed (attempt {attempt+1}): '{phrase[:40]}': {e}")
+            if attempt < 2:
+                _time.sleep(0.5)  # brief back-off before retry
+        else:
+            log.error(f"[PhraseCache] Gave up after 3 attempts: '{phrase[:40]}'")
     log.info(f"[PhraseCache] Built {success}/{len(CACHED_PHRASES)} phrases")
 
 

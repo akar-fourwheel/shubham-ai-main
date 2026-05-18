@@ -14,7 +14,8 @@ TRAINING: This AI is trained with world's best sales techniques:
 import json, re, logging
 from datetime import datetime, timedelta
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types as genai_types
 
 import config
 from scraper import get_bike_catalog, format_catalog_for_ai
@@ -22,14 +23,34 @@ from sheets_manager import get_active_offers, get_loss_reasons
 
 log = logging.getLogger("shubham-ai.agent")
 
-_gemini_configured = False
-def _ensure_gemini() -> None:
-    global _gemini_configured
-    if not _gemini_configured:
+_SENTENCE_ENDERS = (".", "?", "!", "।")
+
+def _clip_to_sentence(text: str) -> str:
+    """Trim text to the last complete sentence. Prevents half-sentences reaching TTS."""
+    text = text.strip()
+    if not text:
+        return text
+    # Strip markdown/code artifacts that Gemini sometimes emits
+    text = re.sub(r"```[\s\S]*?```", "", text).strip()
+    text = re.sub(r"\{[\s\S]*?\}", "", text).strip()
+    # Find last sentence boundary
+    last = max(text.rfind("."), text.rfind("?"), text.rfind("!"), text.rfind("।"))
+    if last > 5:
+        text = text[:last + 1].strip()
+    # Ensure it ends with punctuation
+    if text and text[-1] not in _SENTENCE_ENDERS:
+        text += "."
+    return text
+
+_gemini_client: genai.Client | None = None
+
+def _get_client() -> genai.Client:
+    global _gemini_client
+    if _gemini_client is None:
         if not config.GEMINI_API_KEY:
             raise RuntimeError("GEMINI_API_KEY is not configured")
-        genai.configure(api_key=config.GEMINI_API_KEY)
-        _gemini_configured = True
+        _gemini_client = genai.Client(api_key=config.GEMINI_API_KEY)
+    return _gemini_client
     
 # ── SYSTEM PROMPT ─────────────────────────────────────────────────────────────
 
@@ -276,30 +297,45 @@ class ConversationManager:
         self.history.append({"role": "user", "content": user_message})
         
         try:
-            _ensure_gemini()
-            # Build Gemini-format history (all messages except the last user one we just appended)
-            trimmed = self.history[-6:] if len(self.history) > 6 else self.history
+            client = _get_client()
+
+            # Build Gemini-format history — all turns EXCEPT the current user message.
+            # Keep last 8 prior turns (4 exchanges) so history never grows unbounded.
+            prior = self.history[:-1]
+            trimmed = prior[-8:] if len(prior) > 8 else prior
+
+            # Gemini requires strict user/model alternation.
+            # If trimming left us starting on "model", drop it to avoid API error.
+            if trimmed and trimmed[0]["role"] == "assistant":
+                trimmed = trimmed[1:]
+
             gemini_history = [
-                {
-                    "role": "model" if m["role"] == "assistant" else "user",
-                    "parts": [m["content"]],
-                }
-                for m in trimmed[:-1]  # exclude the current user message
+                genai_types.Content(
+                    role="model" if m["role"] == "assistant" else "user",
+                    parts=[genai_types.Part(text=m["content"])],
+                )
+                for m in trimmed
             ]
-            model = genai.GenerativeModel(
-                model_name=config.GEMINI_MODEL,
-                system_instruction=self.system_prompt,
-            )
-            chat_session = model.start_chat(history=gemini_history)
-            response = chat_session.send_message(
-                user_message,
-                generation_config=genai.types.GenerationConfig(
+
+            response = client.models.generate_content(
+                model=config.GEMINI_MODEL,
+                contents=gemini_history + [
+                    genai_types.Content(
+                        role="user",
+                        parts=[genai_types.Part(text=user_message)],
+                    )
+                ],
+                config=genai_types.GenerateContentConfig(
+                    system_instruction=self.system_prompt,
                     temperature=0.8,
-                    max_output_tokens=80,
-                    # thinking_config disabled — keeps latency low for phone calls
+                    max_output_tokens=150,  # Gemini is verbose — 80 was causing mid-sentence cuts
+                    thinking_config=genai_types.ThinkingConfig(thinking_budget=0),  # disable thinking for low latency
                 ),
             )
-            ai_reply = response.text
+            ai_reply = response.text or ""
+            # Clip at last complete sentence so TTS never gets a half-sentence
+            ai_reply = _clip_to_sentence(ai_reply)
+
         except Exception as exc:
             log.error("Gemini chat failed: %s", exc)
             ai_reply = "Ji, main samajh rahi hoon. Kya aap thoda aur detail de sakte hain?"
@@ -361,16 +397,20 @@ Return ONLY valid JSON (no markdown, no explanation):
 }}"""
         
         try:
-            _ensure_gemini()
-            model = genai.GenerativeModel(config.GEMINI_FAST_MODEL)
-            response = model.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
+            client = _get_client()
+            response = client.models.generate_content(
+                model=config.GEMINI_FAST_MODEL,
+                contents=[genai_types.Content(
+                    role="user",
+                    parts=[genai_types.Part(text=prompt)],
+                )],
+                config=genai_types.GenerateContentConfig(
                     temperature=0,
-                    max_output_tokens=500,
+                    max_output_tokens=600,
+                    thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
                 ),
             )
-            raw = response.text.strip()
+            raw = (response.text or "").strip()
             raw = re.sub(r"```json|```", "", raw).strip()
             return json.loads(raw)
         except Exception as e:
