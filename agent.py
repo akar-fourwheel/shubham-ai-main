@@ -329,7 +329,7 @@ class ConversationManager:
                     system_instruction=self.system_prompt,
                     temperature=0.8,
                     max_output_tokens=150,  # Gemini is verbose — 80 was causing mid-sentence cuts
-                    thinking_config=genai_types.ThinkingConfig(thinking_budget=0),  # disable thinking for low latency
+                    thinking_config=genai_types.ThinkingConfig(thinkingBudget=0),  # disable thinking for low latency
                 ),
             )
             ai_reply = response.text or ""
@@ -406,13 +406,31 @@ Return ONLY valid JSON (no markdown, no explanation):
                 )],
                 config=genai_types.GenerateContentConfig(
                     temperature=0,
-                    max_output_tokens=600,
-                    thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
+                    max_output_tokens=1200,
+                    thinking_config=genai_types.ThinkingConfig(thinkingBudget=0),
                 ),
             )
             raw = (response.text or "").strip()
             raw = re.sub(r"```json|```", "", raw).strip()
-            return json.loads(raw)
+            # Try clean parse first
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError:
+                # Gemini sometimes truncates — find last complete field by trimming to last closing brace
+                # Reconstruct a valid JSON by closing any open string/object
+                last_brace = raw.rfind("}")
+                if last_brace > 0:
+                    try:
+                        return json.loads(raw[:last_brace + 1])
+                    except Exception:
+                        pass
+                # Final fallback — extract whatever we can
+                result = {"temperature": "warm", "next_action": "followup_call", "notes": "Partial analysis"}
+                for field in ["customer_name", "temperature", "next_action", "call_outcome", "interested_model", "budget_range"]:
+                    m = re.search(rf'"{field}"\s*:\s*"([^"]*)"', raw)
+                    if m:
+                        result[field] = m.group(1)
+                return result
         except Exception as e:
             print(f"[Agent] Call analysis failed: {e}")
             return {"temperature": "warm", "next_action": "followup_call", "notes": "Analysis failed"}
