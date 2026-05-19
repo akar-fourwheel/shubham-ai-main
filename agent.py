@@ -15,7 +15,7 @@ import json, re, logging
 from datetime import datetime, timedelta
 
 from google import genai
-from google.genai import types as genai_types
+from google.genai import types as genai_types  # ThinkingConfig intentionally unused — version compatibility
 
 import config
 from scraper import get_bike_catalog, format_catalog_for_ai
@@ -329,7 +329,6 @@ class ConversationManager:
                     system_instruction=self.system_prompt,
                     temperature=0.8,
                     max_output_tokens=150,  # Gemini is verbose — 80 was causing mid-sentence cuts
-                    thinking_config=genai_types.ThinkingConfig(thinkingBudget=0),  # disable thinking for low latency
                 ),
             )
             ai_reply = response.text or ""
@@ -406,8 +405,7 @@ Return ONLY valid JSON (no markdown, no explanation):
                 )],
                 config=genai_types.GenerateContentConfig(
                     temperature=0,
-                    max_output_tokens=1200,
-                    thinking_config=genai_types.ThinkingConfig(thinkingBudget=0),
+                    max_output_tokens=1200,  # JSON schema is large — 600 was causing truncated strings
                 ),
             )
             raw = (response.text or "").strip()
