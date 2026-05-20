@@ -33,8 +33,16 @@ def _clip_to_sentence(text: str) -> str:
     # Strip markdown/code artifacts that Gemini sometimes emits
     text = re.sub(r"```[\s\S]*?```", "", text).strip()
     text = re.sub(r"\{[\s\S]*?\}", "", text).strip()
-    # Find last sentence boundary
-    last = max(text.rfind("."), text.rfind("?"), text.rfind("!"), text.rfind("।"))
+    # Don't clip short responses — they're probably already complete
+    if len(text) < 25:
+        return text
+    # Find last sentence boundary — but skip "." that follows a digit (e.g. "6." in "60,000")
+    last = -1
+    for i, ch in enumerate(text):
+        if ch in ("?", "!", "।"):
+            last = i
+        elif ch == "." and i > 0 and not text[i-1].isdigit():
+            last = i
     if last > 5:
         text = text[:last + 1].strip()
     # Ensure it ends with punctuation
@@ -295,7 +303,7 @@ class ConversationManager:
 
     def chat(self, user_message: str) -> str:
         self.history.append({"role": "user", "content": user_message})
-        
+
         try:
             client = _get_client()
 
