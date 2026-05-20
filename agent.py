@@ -2,7 +2,7 @@
 agent.py
 The AI brain — WORLD-CLASS SALES AI with advanced persuasion techniques.
 Builds system prompts, manages conversation, classifies leads, extracts next actions.
-Uses Gemini 2.5 Flash (thinking disabled for low latency) with full Hero catalog + active offers injected.
+Uses Cerebras (ultra-fast wafer-scale inference) with full Hero catalog + active offers injected.
 
 TRAINING: This AI is trained with world's best sales techniques:
 - Dale Carnegie principles
@@ -14,8 +14,7 @@ TRAINING: This AI is trained with world's best sales techniques:
 import json, re, logging
 from datetime import datetime, timedelta
 
-from google import genai
-from google.genai import types as genai_types  # ThinkingConfig intentionally unused — version compatibility
+from openai import OpenAI  # Cerebras uses OpenAI-compatible API
 
 import config
 from scraper import get_bike_catalog, format_catalog_for_ai
@@ -23,42 +22,17 @@ from sheets_manager import get_active_offers, get_loss_reasons
 
 log = logging.getLogger("shubham-ai.agent")
 
-_SENTENCE_ENDERS = (".", "?", "!", "।")
-
-def _clip_to_sentence(text: str) -> str:
-    """Trim text to the last complete sentence. Prevents half-sentences reaching TTS."""
-    text = text.strip()
-    if not text:
-        return text
-    # Strip markdown/code artifacts that Gemini sometimes emits
-    text = re.sub(r"```[\s\S]*?```", "", text).strip()
-    text = re.sub(r"\{[\s\S]*?\}", "", text).strip()
-    # Don't clip short responses — they're probably already complete
-    if len(text) < 25:
-        return text
-    # Find last sentence boundary — but skip "." that follows a digit (e.g. "6." in "60,000")
-    last = -1
-    for i, ch in enumerate(text):
-        if ch in ("?", "!", "।"):
-            last = i
-        elif ch == "." and i > 0 and not text[i-1].isdigit():
-            last = i
-    if last > 5:
-        text = text[:last + 1].strip()
-    # Ensure it ends with punctuation
-    if text and text[-1] not in _SENTENCE_ENDERS:
-        text += "."
-    return text
-
-_gemini_client: genai.Client | None = None
-
-def _get_client() -> genai.Client:
-    global _gemini_client
-    if _gemini_client is None:
-        if not config.GEMINI_API_KEY:
-            raise RuntimeError("GEMINI_API_KEY is not configured")
-        _gemini_client = genai.Client(api_key=config.GEMINI_API_KEY)
-    return _gemini_client
+_cerebras_client = None
+def _get_client() -> OpenAI:
+    global _cerebras_client
+    if _cerebras_client is None:
+        if not config.CEREBRAS_API_KEY:
+            raise RuntimeError("CEREBRAS_API_KEY is not configured")
+        _cerebras_client = OpenAI(
+            api_key=config.CEREBRAS_API_KEY,
+            base_url="https://api.cerebras.ai/v1",
+        )
+    return _cerebras_client
     
 # ── SYSTEM PROMPT ─────────────────────────────────────────────────────────────
 
@@ -306,45 +280,16 @@ class ConversationManager:
 
         try:
             client = _get_client()
-
-            # Build Gemini-format history — all turns EXCEPT the current user message.
-            # Keep last 8 prior turns (4 exchanges) so history never grows unbounded.
-            prior = self.history[:-1]
-            trimmed = prior[-8:] if len(prior) > 8 else prior
-
-            # Gemini requires strict user/model alternation.
-            # If trimming left us starting on "model", drop it to avoid API error.
-            if trimmed and trimmed[0]["role"] == "assistant":
-                trimmed = trimmed[1:]
-
-            gemini_history = [
-                genai_types.Content(
-                    role="model" if m["role"] == "assistant" else "user",
-                    parts=[genai_types.Part(text=m["content"])],
-                )
-                for m in trimmed
-            ]
-
-            response = client.models.generate_content(
-                model=config.GEMINI_MODEL,
-                contents=gemini_history + [
-                    genai_types.Content(
-                        role="user",
-                        parts=[genai_types.Part(text=user_message)],
-                    )
-                ],
-                config=genai_types.GenerateContentConfig(
-                    system_instruction=self.system_prompt,
-                    temperature=0.8,
-                    max_output_tokens=150,  # Gemini is verbose — 80 was causing mid-sentence cuts
-                ),
+            trimmed_history = self.history[-6:] if len(self.history) > 6 else self.history
+            response = client.chat.completions.create(
+                model=config.CEREBRAS_MODEL,
+                messages=[{"role": "system", "content": self.system_prompt}] + trimmed_history,
+                temperature=0.8,
+                max_tokens=80,
             )
-            ai_reply = response.text or ""
-            # Clip at last complete sentence so TTS never gets a half-sentence
-            ai_reply = _clip_to_sentence(ai_reply)
-
+            ai_reply = response.choices[0].message.content
         except Exception as exc:
-            log.error("Gemini chat failed: %s", exc)
+            log.error("Cerebras chat failed: %s", exc)
             ai_reply = "Ji, main samajh rahi hoon. Kya aap thoda aur detail de sakte hain?"
 
         self.history.append({"role": "assistant", "content": ai_reply})
@@ -358,7 +303,7 @@ class ConversationManager:
         return "\n".join(lines)
     
     def analyze_call(self) -> dict:
-        """Ask Gemini to analyze full conversation and extract structured data."""
+        """Ask Cerebras to analyze full conversation and extract structured data."""
         transcript = self.get_full_transcript()
         if not transcript.strip():
             return {}
@@ -405,38 +350,15 @@ Return ONLY valid JSON (no markdown, no explanation):
         
         try:
             client = _get_client()
-            response = client.models.generate_content(
-                model=config.GEMINI_FAST_MODEL,
-                contents=[genai_types.Content(
-                    role="user",
-                    parts=[genai_types.Part(text=prompt)],
-                )],
-                config=genai_types.GenerateContentConfig(
-                    temperature=0,
-                    max_output_tokens=1200,  # JSON schema is large — 600 was causing truncated strings
-                ),
+            r = client.chat.completions.create(
+                model=config.CEREBRAS_FAST_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+                max_tokens=500,
             )
-            raw = (response.text or "").strip()
+            raw = r.choices[0].message.content.strip()
             raw = re.sub(r"```json|```", "", raw).strip()
-            # Try clean parse first
-            try:
-                return json.loads(raw)
-            except json.JSONDecodeError:
-                # Gemini sometimes truncates — find last complete field by trimming to last closing brace
-                # Reconstruct a valid JSON by closing any open string/object
-                last_brace = raw.rfind("}")
-                if last_brace > 0:
-                    try:
-                        return json.loads(raw[:last_brace + 1])
-                    except Exception:
-                        pass
-                # Final fallback — extract whatever we can
-                result = {"temperature": "warm", "next_action": "followup_call", "notes": "Partial analysis"}
-                for field in ["customer_name", "temperature", "next_action", "call_outcome", "interested_model", "budget_range"]:
-                    m = re.search(rf'"{field}"\s*:\s*"([^"]*)"', raw)
-                    if m:
-                        result[field] = m.group(1)
-                return result
+            return json.loads(raw)
         except Exception as e:
             print(f"[Agent] Call analysis failed: {e}")
             return {"temperature": "warm", "next_action": "followup_call", "notes": "Analysis failed"}
