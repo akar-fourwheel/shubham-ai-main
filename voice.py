@@ -333,7 +333,7 @@ async def _tts_single_chunk(chunk: str, language: str, headers: dict) -> bytes:
         "speaker":              "anushka",
         "model":                "bulbul:v2",
         "pitch":                0,
-        "pace":                 1.2,   # 🔥 OPTIMIZATION: Faster pace for natural phone speech (was 1.1)
+        "pace":                 1.05,  # Natural pace — 1.2 caused rushed syllables and foreign-sounding prosody
         "loudness":             1.5,
         "enable_preprocessing": True,
     }
@@ -373,7 +373,7 @@ def _sarvam_tts(text: str, language: str = "hi-IN") -> bytes:
             "speaker":              "anushka",
             "model":                "bulbul:v2",
             "pitch":                0,
-            "pace":                 1.2,   # 🔥 OPTIMIZATION: Faster pace
+            "pace":                 1.05,  # Natural pace — 1.2 caused rushed syllables
             "loudness":             1.5,
             "enable_preprocessing": True,
         }
