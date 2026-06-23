@@ -26,8 +26,6 @@ EXOTEL_SUBDOMAIN    = os.getenv("EXOTEL_SUBDOMAIN", "api.exotel.com").strip()
 EXOTEL_APP_ID       = os.getenv("EXOTEL_APP_ID", "1186396")
 
 # -- AI / ML APIs -------------------------------------------------------------
-GROQ_API_KEY        = os.getenv("GROQ_API_KEY", "").strip()
-
 # 🔥 OPTIMIZATION: Hybrid model routing — fast model for simple queries, smart model for complex
 # GROQ_FAST_MODEL     = os.getenv("GROQ_FAST_MODEL", "llama-3.1-8b-instant").strip()
 # GROQ_SMART_MODEL    = os.getenv("GROQ_SMART_MODEL", "llama-3.3-70b-versatile").strip()
@@ -38,9 +36,12 @@ GROQ_API_KEY        = os.getenv("GROQ_API_KEY", "").strip()
 # GEMINI_MODEL       = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()      # main chat
 # GEMINI_FAST_MODEL  = os.getenv("GEMINI_FAST_MODEL", "gemini-2.5-flash").strip() # call analysis
 
-CEREBRAS_API_KEY    = os.getenv("CEREBRAS_API_KEY", "").strip()
-CEREBRAS_MODEL      = os.getenv("CEREBRAS_MODEL", "llama-3.1-8b").strip()
-CEREBRAS_FAST_MODEL = os.getenv("CEREBRAS_FAST_MODEL", "llama-3.1-8b").strip()
+# Groq — multiple keys for rate limit rotation
+# Set GROQ_API_KEYS as a comma-separated list of keys in your env:
+#   GROQ_API_KEYS=gsk_key1,gsk_key2,gsk_key3
+# Get free keys at https://console.groq.com (one per account/email)
+GROQ_API_KEYS = os.getenv("GROQ_API_KEYS", os.getenv("GROQ_API_KEY", "")).strip()
+GROQ_MODEL    = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
 
 
 DEEPGRAM_API_KEY    = os.getenv("DEEPGRAM_API_KEY", "").strip()
@@ -110,8 +111,8 @@ def validate_config() -> list:
         warnings.append("EXOTEL_API_KEY is not set -- outbound calls will fail")
     if not EXOTEL_API_TOKEN:
         warnings.append("EXOTEL_API_TOKEN is not set -- outbound calls will fail")
-    if not CEREBRAS_API_KEY:
-        warnings.append("GEMINI_API_KEY is not set -- AI conversations will fail")
+    if not GROQ_API_KEYS:
+        warnings.append("GROQ_API_KEYS is not set -- AI conversations will fail")
     if not SARVAM_API_KEY:
         warnings.append("SARVAM_API_KEY is not set -- TTS/STT will fall back to Deepgram only")
     if not DEEPGRAM_API_KEY:

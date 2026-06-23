@@ -14,7 +14,8 @@ TRAINING: This AI is trained with world's best sales techniques:
 import json, re, logging
 from datetime import datetime, timedelta
 
-from openai import OpenAI  # Cerebras uses OpenAI-compatible API
+import itertools
+from openai import OpenAI  # Groq uses OpenAI-compatible API
 
 import config
 from scraper import get_bike_catalog, format_catalog_for_ai
@@ -22,17 +23,30 @@ from sheets_manager import get_active_offers, get_loss_reasons
 
 log = logging.getLogger("shubham-ai.agent")
 
-_cerebras_client = None
-def _get_client() -> OpenAI:
-    global _cerebras_client
-    if _cerebras_client is None:
-        if not config.CEREBRAS_API_KEY:
-            raise RuntimeError("CEREBRAS_API_KEY is not configured")
-        _cerebras_client = OpenAI(
-            api_key=config.CEREBRAS_API_KEY,
-            base_url="https://api.cerebras.ai/v1",
-        )
-    return _cerebras_client
+# ── GROQ MULTI-KEY ROTATION ───────────────────────────────────────────────────
+# Add multiple free Groq keys to GROQ_API_KEYS (comma-separated env var).
+# On rate limit (429), automatically rotates to the next key.
+# Get free keys at: https://console.groq.com
+
+_groq_clients = []
+_groq_cycle = None
+
+def _build_groq_clients():
+    global _groq_clients, _groq_cycle
+    keys = [k.strip() for k in config.GROQ_API_KEYS.split(",") if k.strip()]
+    if not keys:
+        raise RuntimeError("No GROQ_API_KEYS configured")
+    _groq_clients = [
+        OpenAI(api_key=k, base_url="https://api.groq.com/openai/v1")
+        for k in keys
+    ]
+    _groq_cycle = itertools.cycle(_groq_clients)
+    log.info("Groq client pool: %d key(s) loaded", len(_groq_clients))
+
+def _get_client():
+    if not _groq_clients:
+        _build_groq_clients()
+    return next(_groq_cycle)
     
 # ── SYSTEM PROMPT ─────────────────────────────────────────────────────────────
 
@@ -312,19 +326,31 @@ class ConversationManager:
 
     def chat(self, user_message: str) -> str:
         self.history.append({"role": "user", "content": user_message})
-        
-        try:
-            client = _get_client()
-            trimmed_history = self.history[-6:] if len(self.history) > 6 else self.history
-            response = client.chat.completions.create(
-                model=config.CEREBRAS_MODEL,
-                messages=[{"role": "system", "content": self.system_prompt}] + trimmed_history,
-                temperature=0.8,
-                max_tokens=80,
-            )
-            ai_reply = response.choices[0].message.content
-        except Exception as exc:
-            log.error("Cerebras chat failed: %s", exc)
+        trimmed_history = self.history[-6:] if len(self.history) > 6 else self.history
+        ai_reply = None
+
+        # Rotate through Groq keys on 429 rate limit
+        if not _groq_clients:
+            _build_groq_clients()
+        for attempt in range(len(_groq_clients)):
+            try:
+                client = next(_groq_cycle)
+                response = client.chat.completions.create(
+                    model=config.GROQ_MODEL,
+                    messages=[{"role": "system", "content": self.system_prompt}] + trimmed_history,
+                    temperature=0.8,
+                    max_tokens=80,
+                )
+                ai_reply = response.choices[0].message.content
+                break
+            except Exception as exc:
+                if "429" in str(exc) or "rate_limit" in str(exc).lower():
+                    log.warning("Groq key rate limited (attempt %d), rotating...", attempt + 1)
+                    continue
+                log.error("Groq chat failed: %s", exc)
+                break
+
+        if not ai_reply:
             ai_reply = "Ji, main samajh rahi hoon. Kya aap thoda aur detail de sakte hain?"
 
         self.history.append({"role": "assistant", "content": ai_reply})
@@ -386,7 +412,7 @@ Return ONLY valid JSON (no markdown, no explanation):
         try:
             client = _get_client()
             r = client.chat.completions.create(
-                model=config.CEREBRAS_FAST_MODEL,
+                model=config.GROQ_MODEL,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0,
                 max_tokens=500,
