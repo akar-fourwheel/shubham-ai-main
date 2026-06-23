@@ -39,8 +39,8 @@ GROQ_API_KEY        = os.getenv("GROQ_API_KEY", "").strip()
 # GEMINI_FAST_MODEL  = os.getenv("GEMINI_FAST_MODEL", "gemini-2.5-flash").strip() # call analysis
 
 CEREBRAS_API_KEY    = os.getenv("CEREBRAS_API_KEY", "").strip()
-CEREBRAS_MODEL      = os.getenv("CEREBRAS_MODEL", "llama3.1-8b").strip()
-CEREBRAS_FAST_MODEL = os.getenv("CEREBRAS_FAST_MODEL", "llama3.1-8b").strip()
+CEREBRAS_MODEL      = os.getenv("CEREBRAS_MODEL", "llama-3.1-8b").strip()
+CEREBRAS_FAST_MODEL = os.getenv("CEREBRAS_FAST_MODEL", "llama-3.1-8b").strip()
 
 
 DEEPGRAM_API_KEY    = os.getenv("DEEPGRAM_API_KEY", "").strip()
